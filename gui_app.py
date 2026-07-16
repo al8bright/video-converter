@@ -177,6 +177,14 @@ class VideoConverterApp(BaseClass):
         self.geometry("820x760")
         self.minsize(780, 700)
 
+        # 윈도우 타이틀바 아이콘 지정
+        try:
+            if os.path.exists("video_icon.ico"):
+                self.iconbitmap("video_icon.ico")
+        except Exception:
+            pass
+
+
         # 데이터 변수 바인딩
         # 하드웨어 정보 탐지 및 권장 작업수 세팅
         self.gpu_name, self.vram_mb = get_nvidia_gpu_info()

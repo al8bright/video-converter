@@ -12,7 +12,8 @@ del /q VideoConverter.spec
 
 echo [2/3] Packing single EXE file...
 call .venv\Scripts\activate.bat
-pyinstaller --noconfirm --onefile --windowed --name="VideoConverter" --add-data ".venv\Lib\site-packages\customtkinter;customtkinter" --collect-all tkinterdnd2 gui_app.py
+pyinstaller --noconfirm --onefile --windowed --name="VideoConverter" --icon="video_icon.ico" --add-data ".venv\Lib\site-packages\customtkinter;customtkinter" --collect-all tkinterdnd2 gui_app.py
+
 
 if errorlevel 1 (
     echo.
