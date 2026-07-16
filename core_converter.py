@@ -4,9 +4,53 @@ import sys
 import shutil
 import subprocess
 import threading
+import ctypes
 
 # ffmpeg/ffprobe 텍스트 디코딩 셋팅
 SUBPROC_TEXT = {"encoding": "utf-8", "errors": "replace"}
+
+def get_system_ram_gb():
+    """ctypes를 이용해 Windows 시스템 RAM 크기(GB) 조회"""
+    try:
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong)
+            ]
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(stat)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        return round(stat.ullTotalPhys / (1024 ** 3), 1)
+    except Exception:
+        return 0.0
+
+def get_nvidia_gpu_info():
+    """nvidia-smi를 실행해 NVIDIA 그래픽카드 이름 및 VRAM(MB) 조회"""
+    creation_flags = 0
+    if sys.platform == 'win32':
+        creation_flags = subprocess.CREATE_NO_WINDOW
+    try:
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, creationflags=creation_flags
+        )
+        output = res.stdout.strip()
+        if output:
+            parts = output.split(",")
+            gpu_name = parts[0].strip()
+            vram_mb = int(parts[1].strip())
+            return gpu_name, vram_mb
+    except Exception:
+        pass
+    return None, 0
+
 
 def get_video_info(file_path):
     """

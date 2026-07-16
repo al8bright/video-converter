@@ -10,7 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 import customtkinter as ctk
 
 # core_converter에서 핵심 변환 모듈 임포트
-from core_converter import get_video_info, process_video, resolve_output_path
+from core_converter import get_video_info, process_video, resolve_output_path, get_system_ram_gb, get_nvidia_gpu_info
+
 
 # 드래그 앤 드롭 라이브러리 예외 처리 로딩
 try:
@@ -177,11 +178,29 @@ class VideoConverterApp(BaseClass):
         self.minsize(780, 700)
 
         # 데이터 변수 바인딩
-        self.parallel_jobs = ctk.IntVar(value=4)
+        # 하드웨어 정보 탐지 및 권장 작업수 세팅
+        self.gpu_name, self.vram_mb = get_nvidia_gpu_info()
+        self.sys_ram_gb = get_system_ram_gb()
+        
+        # 권장 작업수 기본값 계산 (VRAM 4GB 이하 -> 1 / 8GB 이하 -> 2 / 12GB 이하 -> 3 / 그 이상 -> 4)
+        if self.gpu_name:
+            if self.vram_mb <= 4100:
+                rec_jobs = 1
+            elif self.vram_mb <= 8200:
+                rec_jobs = 2
+            elif self.vram_mb <= 12300:
+                rec_jobs = 3
+            else:
+                rec_jobs = 4
+        else:
+            rec_jobs = 2  # GPU 미검출 시 기본 권장 2개
+            
+        self.parallel_jobs = ctk.IntVar(value=rec_jobs)
         self.video_bitrate = ctk.StringVar(value="3.5")
         self.audio_bitrate = ctk.StringVar(value="128k")
         self.resolution_limit = ctk.StringVar(value="1080p (FHD)")
         self.delete_source = ctk.BooleanVar(value=True)
+
 
         self.save_mode = ctk.StringVar(value="same")
         self.custom_output_path = ctk.StringVar(value="")
@@ -213,12 +232,12 @@ class VideoConverterApp(BaseClass):
             self.dnd_panel.configure(label_text="[ 드래그 앤 드롭 기능 비활성 - 아래 버튼을 사용해 주세요 ]")
 
     def _create_widgets(self):
-        self.grid_rowconfigure(4, weight=1)
+        self.grid_rowconfigure(5, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         # 1. 드래그앤드롭 영역 패널
         self.dnd_panel = ctk.CTkFrame(self, fg_color="#1E1E2E", height=90, corner_radius=8)
-        self.dnd_panel.grid(row=0, column=0, padx=15, pady=(15, 8), sticky="ew")
+        self.dnd_panel.grid(row=0, column=0, padx=15, pady=(15, 6), sticky="ew")
 
         dnd_label = ctk.CTkLabel(
             self.dnd_panel,
@@ -241,9 +260,26 @@ class VideoConverterApp(BaseClass):
         )
         self.btn_add_folder.pack(side="left", padx=10)
 
+        # 1.5 시스템 정보 바 패널 (row=1)
+        sys_info_bar = ctk.CTkFrame(self, fg_color="#181824", height=32, corner_radius=6)
+        sys_info_bar.grid(row=1, column=0, padx=15, pady=(4, 4), sticky="ew")
+
+        if self.gpu_name:
+            gpu_desc = f"{self.gpu_name} ({self.vram_mb/1024:.1f}GB VRAM)"
+        else:
+            gpu_desc = "NVIDIA GPU 미감지 (CPU/S/W 모드 작동)"
+            
+        sys_ram_desc = f"{self.sys_ram_gb} GB" if self.sys_ram_gb > 0 else "감지 불가"
+        
+        info_text = f"🖥️ 시스템 사양 감지  |  NVIDIA GPU: [{gpu_desc}]  |  시스템 RAM: [{sys_ram_desc}]"
+        lbl_sys_info = ctk.CTkLabel(
+            sys_info_bar, text=info_text, font=("Malgun Gothic", 11, "bold"), text_color="#A0A0B0"
+        )
+        lbl_sys_info.pack(side="left", padx=15, pady=4)
+
         # 2. 상세 설정 영역 패널
         self.settings_panel = ctk.CTkFrame(self, fg_color="#1E1E2E", corner_radius=8)
-        self.settings_panel.grid(row=1, column=0, padx=15, pady=4, sticky="ew")
+        self.settings_panel.grid(row=2, column=0, padx=15, pady=4, sticky="ew")
         self.settings_panel.grid_columnconfigure(1, weight=1)
         self.settings_panel.grid_columnconfigure(3, weight=1)
 
@@ -259,8 +295,9 @@ class VideoConverterApp(BaseClass):
         )
         self.slider_jobs.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
-        self.lbl_jobs_val = ctk.CTkLabel(slider_frame, text="4개", font=("Malgun Gothic", 11, "bold"), width=30)
+        self.lbl_jobs_val = ctk.CTkLabel(slider_frame, text=f"{self.parallel_jobs.get()}개", font=("Malgun Gothic", 11, "bold"), width=30)
         self.lbl_jobs_val.pack(side="right")
+
 
         # 2.2 비트레이트 설정
         lbl_v_bitrate = ctk.CTkLabel(self.settings_panel, text="최대 비디오 대역폭:", font=("Malgun Gothic", 11, "bold"))
@@ -363,9 +400,8 @@ class VideoConverterApp(BaseClass):
 
         # 3. 실시간 병렬 인코딩 대시보드 영역 (실시간 진행 상황 뷰어)
         self.dashboard_panel = ctk.CTkFrame(self, fg_color="#13131F", corner_radius=8)
-        self.dashboard_panel.grid(row=2, column=0, padx=15, pady=6, sticky="ew")
+        self.dashboard_panel.grid(row=3, column=0, padx=15, pady=6, sticky="ew")
 
-        
         lbl_dash = ctk.CTkLabel(self.dashboard_panel, text="현재 실행 중인 변환 작업", font=("Malgun Gothic", 12, "bold"), text_color="#A0A0B0")
         lbl_dash.pack(anchor="w", padx=15, pady=(8, 4))
         
@@ -380,7 +416,7 @@ class VideoConverterApp(BaseClass):
 
         # 4. 대기열 테이블 타이틀 헤더 프레임
         self.table_header = ctk.CTkFrame(self, fg_color="#1E1E2E", height=28, corner_radius=4)
-        self.table_header.grid(row=3, column=0, padx=15, pady=(8, 0), sticky="ew")
+        self.table_header.grid(row=4, column=0, padx=15, pady=(8, 0), sticky="ew")
 
         lbl_h_name = ctk.CTkLabel(self.table_header, text="파일명", anchor="w", font=("Malgun Gothic", 11, "bold"), text_color="#A0A0B0")
         lbl_h_name.pack(side="left", fill="x", expand=True, padx=(15, 5), pady=2)
@@ -399,11 +435,11 @@ class VideoConverterApp(BaseClass):
 
         # 5. 스크롤 대기열 영역
         self.queue_frame = ScrollableQueueFrame(self)
-        self.queue_frame.grid(row=4, column=0, padx=15, pady=(0, 8), sticky="nsew")
+        self.queue_frame.grid(row=5, column=0, padx=15, pady=(0, 8), sticky="nsew")
 
         # 6. 진행바 및 제어 버튼
         self.control_panel = ctk.CTkFrame(self, fg_color="transparent")
-        self.control_panel.grid(row=5, column=0, padx=15, pady=15, sticky="ew")
+        self.control_panel.grid(row=6, column=0, padx=15, pady=15, sticky="ew")
         self.control_panel.grid_columnconfigure(0, weight=1)
 
         self.overall_progress_bar = ctk.CTkProgressBar(self.control_panel, height=12, fg_color="#2D2D3D", progress_color="#06D6A0")
@@ -422,6 +458,7 @@ class VideoConverterApp(BaseClass):
             self.control_panel, text="변환 시작", command=self._start_conversion, width=120, height=35, fg_color="#06D6A0", hover_color="#05B98A", text_color="#1E1E2E", font=("Malgun Gothic", 12, "bold")
         )
         self.btn_start.grid(row=1, column=2, padx=5, sticky="e")
+
 
     def _arrange_progress_slots(self):
         """설정된 동시 변환 개수(PARALLEL_JOBS)에 맞게 진행바 슬롯 위젯을 노출/배치"""
