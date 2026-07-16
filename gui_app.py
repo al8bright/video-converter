@@ -378,25 +378,19 @@ class VideoConverterApp(BaseClass):
         )
         self.entry_name_value.pack(side="left")
 
-        # 2.5 가이드/팁 정보 패널 추가
-        tip_frame = ctk.CTkFrame(self.settings_panel, fg_color="#181824", corner_radius=6)
-        tip_frame.grid(row=5, column=0, columnspan=4, padx=15, pady=(8, 12), sticky="ew")
+        # 2.5 가이드/도움말 팝업 버튼 추가
+        self.btn_help = ctk.CTkButton(
+            self.settings_panel,
+            text="❔ 설정 도움말 & 성능 팁",
+            font=("Malgun Gothic", 11, "bold"),
+            fg_color="#4F5D75",
+            hover_color="#3D4A5E",
+            width=150,
+            height=24,
+            command=self._show_help_popup
+        )
+        self.btn_help.grid(row=2, column=2, columnspan=2, padx=15, pady=8, sticky="e")
 
-        lbl_tip_title = ctk.CTkLabel(
-            tip_frame, text="💡 설정 가이드 & 팁 (Tip)", font=("Malgun Gothic", 11, "bold"), text_color="#06D6A0"
-        )
-        lbl_tip_title.pack(anchor="w", padx=12, pady=(8, 2))
-
-        tip_text = (
-            "• 동시 변환 수: 그래픽카드 VRAM 용량에 맞춰 조절 (4GB 이하는 1~2개, 8GB는 3~4개, 12GB 이상은 4개 이상 권장)\n"
-            "• 최대 비디오 대역폭: 기본 3.5 Mbps 권장. 낮출수록 용량이 축소되나 격동적인 장면에서 픽셀 깨짐이 발생할 수 있습니다.\n"
-            "• 해상도 제한: 1080p FHD 권장. 원본 해상도가 설정 제한보다 큰 경우에만 종횡비를 유지하며 스케일링을 가동합니다.\n"
-            "• 지능적 복사(Remux): 원본 비트레이트가 4 Mbps 이하면 화질 손실 없이 초고속으로 원본 스트림을 복사해 저장합니다."
-        )
-        lbl_tip_desc = ctk.CTkLabel(
-            tip_frame, text=tip_text, font=("Malgun Gothic", 10), text_color="#A0A0B0", justify="left", anchor="w"
-        )
-        lbl_tip_desc.pack(anchor="w", padx=12, pady=(0, 8))
 
         # 3. 실시간 병렬 인코딩 대시보드 영역 (실시간 진행 상황 뷰어)
         self.dashboard_panel = ctk.CTkFrame(self, fg_color="#13131F", corner_radius=8)
@@ -780,7 +774,77 @@ class VideoConverterApp(BaseClass):
             
         messagebox.showinfo("완료", "모든 비디오 변환/복사 작업이 완료되었습니다!")
 
+    def _show_help_popup(self):
+        """세련된 도움말/팁 안내 팝업창(Toplevel) 호출"""
+        popup = ctk.CTkToplevel(self)
+        popup.title("NVIDIA Video Converter 설정 가이드 & 팁")
+        popup.geometry("600x480")
+        popup.resizable(False, False)
+        
+        # 메인 윈도우 위에 항상 표시되도록 모달화
+        popup.transient(self)
+        popup.grab_set()
+
+        # 내부 메인 스크롤 프레임 구성
+        scroll = ctk.CTkScrollableFrame(popup, fg_color="#181824", corner_radius=8)
+        scroll.pack(fill="both", expand=True, padx=15, pady=(15, 10))
+
+        # 타이틀
+        lbl_title = ctk.CTkLabel(
+            scroll, text="💡 설정 가이드 & 성능 팁", font=("Malgun Gothic", 16, "bold"), text_color="#06D6A0"
+        )
+        lbl_title.pack(anchor="w", padx=10, pady=(10, 15))
+
+        # 섹션 1: NVIDIA GPU 가속과 100% 가용량
+        lbl_sec1_title = ctk.CTkLabel(
+            scroll, text="⚡ NVIDIA GPU 가속 & 100% 가용 정보", font=("Malgun Gothic", 13, "bold"), text_color="#3A86FF"
+        )
+        lbl_sec1_title.pack(anchor="w", padx=10, pady=(5, 5))
+
+        sec1_text = (
+            "• 본 변환기는 NVIDIA 그래픽카드에 전용 내장된 비디오 인코더 칩(NVENC)을 활용합니다.\n"
+            "• 하드웨어 가속 인코딩이 가동되면, 시스템이 낼 수 있는 최상의 속도로 칩이 자동 작동하여\n"
+            "  최대 100% 한계치까지 성능을 풀 가용합니다.\n"
+            "• 하드웨어 ASIC 칩 특성상 소프트웨어적으로 '사용률을 70%로 고정'하는 것과 같은\n"
+            "  직접 캡(Cap) 제어는 불가능합니다.\n"
+            "• 그래픽카드의 발열을 방지하고 작업 부하를 직접 제어하려면 '동시 변환 작업 수' 슬라이더를\n"
+            "  낮게(예: 1~2개) 지정하여 간접적으로 연산 하중을 조절하는 방법을 권장합니다."
+        )
+        lbl_sec1_desc = ctk.CTkLabel(
+            scroll, text=sec1_text, font=("Malgun Gothic", 11), text_color="#E0E0E6", justify="left", anchor="w"
+        )
+        lbl_sec1_desc.pack(anchor="w", padx=15, pady=(0, 15))
+
+        # 섹션 2: 세부 설정 가이드
+        lbl_sec2_title = ctk.CTkLabel(
+            scroll, text="⚙️ 세부 변환 설정 안내", font=("Malgun Gothic", 13, "bold"), text_color="#3A86FF"
+        )
+        lbl_sec2_title.pack(anchor="w", padx=10, pady=(5, 5))
+
+        sec2_text = (
+            "• 동시 변환 수: 사용자의 그래픽카드 VRAM 용량에 따라 권장 값이 자동 추천됩니다.\n"
+            "  - 4GB 이하: 1개 / 8GB 이하: 2개 / 12GB 이하: 3개 / 12GB 초과: 4개\n"
+            "  - VRAM 용량을 넘어서 너무 많은 동시 인코딩을 가동하면 인코더 오류가 발생할 수 있습니다.\n\n"
+            "• 최대 비디오 대역폭 (Bitrate): 기본 3.5 Mbps 권장.\n"
+            "  - 낮출수록 파일 용량이 크게 감소하지만, 격렬한 장면에서 화면 깨짐이 발생할 수 있습니다.\n\n"
+            "• 해상도 제한: 기본 1080p (FHD) 권장.\n"
+            "  - 원본의 해상도가 설정 제한 값보다 큰 경우에만 원본 비율을 유지하며 다운스케일링합니다.\n\n"
+            "• 지능적 복사 (Remux): 화질 손실 및 시간 방지 필터링.\n"
+            "  - 원본 비디오의 비트레이트가 4 Mbps 이하일 때는 재인코딩(화질 손실)하지 않고 그대로 복사해 저장합니다."
+        )
+        lbl_sec2_desc = ctk.CTkLabel(
+            scroll, text=sec2_text, font=("Malgun Gothic", 11), text_color="#E0E0E6", justify="left", anchor="w"
+        )
+        lbl_sec2_desc.pack(anchor="w", padx=15, pady=(0, 10))
+
+        # 닫기 버튼
+        btn_close = ctk.CTkButton(
+            popup, text="닫기", command=popup.destroy, width=100, height=30, fg_color="#4F5D75", hover_color="#3D4A5E"
+        )
+        btn_close.pack(pady=10)
+
 
 if __name__ == "__main__":
     app = VideoConverterApp()
     app.mainloop()
+
