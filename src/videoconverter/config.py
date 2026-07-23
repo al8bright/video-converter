@@ -27,6 +27,18 @@ REMUX_THRESHOLD_MBPS = 4.0
 FASTSTART_DEFAULT = True
 VIDEO_BUFSIZE_MULTIPLIER = 2
 
+# 진행(time=) 로그가 이 시간(초)을 넘도록 갱신되지 않으면 ffmpeg가 행(hang)된 것으로
+# 간주하고 강제 종료한다. (원본 CLI convert_video_win.py 의 STUCK_TIMEOUT_SEC 포팅)
+STUCK_TIMEOUT_SEC = 600
+
+# 실패 stderr 요약 시 걸러낼 ffmpeg 부트 로그 접두사와 최대 유지 라인 수.
+FFMPEG_STDERR_SKIP_PREFIXES = (
+    "ffmpeg version", "built with", "configuration:", "libavutil",
+    "libavcodec", "libavformat", "libavdevice", "libavfilter",
+    "libswscale", "libswresample",
+)
+FFMPEG_STDERR_MAX_LINES = 20
+
 TEXT_SUB_CODECS = frozenset(
     {"subrip", "srt", "ass", "ssa", "mov_text", "webvtt", "text"}
 )

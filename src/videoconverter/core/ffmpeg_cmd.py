@@ -8,6 +8,8 @@ from ..config import (
     DEFAULT_NVENC_PRESET,
     DEFAULT_VIDEO_MAXRATE_MBPS,
     FASTSTART_EXTENSIONS,
+    FFMPEG_STDERR_MAX_LINES,
+    FFMPEG_STDERR_SKIP_PREFIXES,
     VIDEO_BUFSIZE_MULTIPLIER,
 )
 
@@ -43,6 +45,39 @@ def _stderr_suggests_fatal_input_error(stderr_text):
             "invalid data found when processing input",
         ]
     )
+
+
+def _stderr_suggests_faststart_failure(stderr_text):
+    """`-movflags +faststart`(moov atom 이동) 단계가 특정 파일시스템/네트워크에서
+    'Error writing trailer/closing file: Invalid argument'로 깨질 때를 감지한다.
+    이 경우 faststart 없이 1회 재시도하면 성공하는 경우가 많다.
+    (원본 CLI convert_one_file 506-528행 포팅)"""
+    if not stderr_text:
+        return False
+    low = stderr_text.lower()
+    return (
+        "error writing trailer: invalid argument" in low
+        or "error closing file: invalid argument" in low
+    )
+
+
+def _summarize_ffmpeg_stderr(stderr_text):
+    """실패 메시지/로그용으로 ffmpeg stderr를 요약한다.
+    부트 로그(버전/설정/라이브러리) 라인을 걸러내고 최대 라인 수로 캡한다.
+    (원본 CLI _summarize_ffmpeg_stderr 포팅; None 안전 처리 보강)"""
+    if not stderr_text or not stderr_text.strip():
+        return "(stderr 없음)"
+    lines = [ln.strip() for ln in stderr_text.strip().splitlines() if ln.strip()]
+    filtered = [
+        ln
+        for ln in lines
+        if not any(ln.startswith(prefix) for prefix in FFMPEG_STDERR_SKIP_PREFIXES)
+    ]
+    if len(filtered) <= FFMPEG_STDERR_MAX_LINES:
+        return "\n".join(filtered)
+    head = 5
+    tail = FFMPEG_STDERR_MAX_LINES - head - 1
+    return "\n".join(filtered[:head] + ["..."] + filtered[-tail:])
 
 
 def _output_wants_faststart(output_path):

@@ -463,12 +463,16 @@ class TestProcessVideoStaging:
         assert status == "FAIL"
         assert calls["n"] == 1  # 폴백 반복 없이 조기 중단
 
-    def test_remux_keeps_original_extension(self, monkeypatch, tmp_path):
+    def test_remux_forces_mp4_extension(self, monkeypatch, tmp_path):
+        # item 5: remux 출력도 .mp4 로 통일된다(과거엔 원본 확장자 유지였음).
         src = tmp_path / "movie.mkv"
         src.write_bytes(b"orig" * 100)
 
         def fake_run(cmd, total, cb, ev, output_path=None):
             out = output_path or cmd[-1]
+            # remux(-c copy) 이므로 재인코딩 코덱 인자가 없어야 하고 출력은 .mp4 여야 한다.
+            assert "copy" in cmd
+            assert out.endswith(".mp4")
             with open(out, "wb") as f:
                 f.write(b"y" * 5000)
             return 0, ""
@@ -476,8 +480,8 @@ class TestProcessVideoStaging:
         self._patch(monkeypatch, REMUX_INFO, fake_run)
         status, msg = cc.process_video(str(src), str(tmp_path), "suffix", "_c", dict(BASE_PV_SETTINGS))
         assert status == "COPY"
-        # remux 는 원본 확장자(.mkv) 유지
-        assert (tmp_path / "movie_c.mkv").exists()
+        assert (tmp_path / "movie_c.mp4").exists()
+        assert not (tmp_path / "movie_c.mkv").exists()
 
     def test_delete_source_removes_original_when_different(self, monkeypatch, tmp_path):
         src = tmp_path / "movie.mkv"
@@ -496,3 +500,248 @@ class TestProcessVideoStaging:
         assert status == "SUCCESS_DEL"
         assert not src.exists()
         assert (tmp_path / "movie_c.mp4").exists()
+
+
+# ---------------------------------------------------------------------------
+# _summarize_ffmpeg_stderr : 부트로그 필터 + 라인 캡 (포팅 항목 4)
+# ---------------------------------------------------------------------------
+class TestSummarizeFfmpegStderr:
+    def test_none_and_empty_return_placeholder(self):
+        assert cc._summarize_ffmpeg_stderr(None) == "(stderr 없음)"
+        assert cc._summarize_ffmpeg_stderr("") == "(stderr 없음)"
+        assert cc._summarize_ffmpeg_stderr("   \n  ") == "(stderr 없음)"
+
+    def test_filters_boot_log_prefixes(self):
+        text = (
+            "ffmpeg version 8.1 blah\n"
+            "built with gcc\n"
+            "configuration: --enable-cuda\n"
+            "libavutil 58\n"
+            "Real error line: could not open encoder\n"
+        )
+        out = cc._summarize_ffmpeg_stderr(text)
+        assert "Real error line: could not open encoder" in out
+        assert "ffmpeg version" not in out
+        assert "libavutil" not in out
+        assert "configuration:" not in out
+
+    def test_caps_long_output_with_ellipsis(self):
+        lines = "\n".join(f"error line {i}" for i in range(100))
+        out = cc._summarize_ffmpeg_stderr(lines)
+        result_lines = out.splitlines()
+        # 최대 라인 수(20) 이내 + 생략 표시(...) 포함
+        assert len(result_lines) <= 20
+        assert "..." in result_lines
+        assert result_lines[0] == "error line 0"
+        assert result_lines[-1] == "error line 99"
+
+
+# ---------------------------------------------------------------------------
+# _stderr_suggests_faststart_failure : faststart 트레일러 오류 감지 (포팅 항목 2)
+# ---------------------------------------------------------------------------
+class TestStderrSuggestsFaststartFailure:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Error writing trailer: Invalid argument",
+            "av_interleaved_write_frame(): Error closing file: Invalid argument",
+            "ERROR WRITING TRAILER: INVALID ARGUMENT",
+        ],
+    )
+    def test_detects_faststart_trailer_errors(self, text):
+        assert cc._stderr_suggests_faststart_failure(text) is True
+
+    def test_unrelated_and_empty_return_false(self):
+        assert cc._stderr_suggests_faststart_failure("") is False
+        assert cc._stderr_suggests_faststart_failure(None) is False
+        assert cc._stderr_suggests_faststart_failure("could not open encoder") is False
+
+
+# ---------------------------------------------------------------------------
+# 프로세스 레지스트리 + terminate_all_processes (포팅 항목 6 / 계약 3)
+# ---------------------------------------------------------------------------
+class _DummyProc:
+    def __init__(self):
+        self.kill_count = 0
+
+    def kill(self):
+        self.kill_count += 1
+
+
+class TestProcessRegistry:
+    def test_public_api_is_exported(self):
+        # 계약: from videoconverter.core import terminate_all_processes
+        from videoconverter.core import terminate_all_processes
+
+        assert callable(terminate_all_processes)
+
+    def test_terminate_kills_all_registered(self):
+        from videoconverter.core import runner
+
+        runner._active_procs.clear()
+        procs = [_DummyProc(), _DummyProc(), _DummyProc()]
+        for proc in procs:
+            runner._register_proc(proc)
+        try:
+            cc.terminate_all_processes()
+            assert all(proc.kill_count == 1 for proc in procs)
+        finally:
+            runner._active_procs.clear()
+
+    def test_terminate_is_idempotent_and_safe(self):
+        from videoconverter.core import runner
+
+        runner._active_procs.clear()
+        proc = _DummyProc()
+        runner._register_proc(proc)
+        try:
+            cc.terminate_all_processes()
+            cc.terminate_all_processes()  # 두 번째 호출도 예외 없이 안전
+            assert proc.kill_count >= 1
+        finally:
+            runner._active_procs.clear()
+
+    def test_terminate_noop_when_empty(self):
+        from videoconverter.core import runner
+
+        runner._active_procs.clear()
+        cc.terminate_all_processes()  # 실행 중 프로세스 없으면 no-op
+
+    def test_unregister_removes_from_registry(self):
+        from videoconverter.core import runner
+
+        runner._active_procs.clear()
+        proc = _DummyProc()
+        runner._register_proc(proc)
+        runner._unregister_proc(proc)
+        try:
+            cc.terminate_all_processes()
+            assert proc.kill_count == 0  # 이미 해제되어 kill 대상 아님
+        finally:
+            runner._active_procs.clear()
+
+
+# ---------------------------------------------------------------------------
+# log_conversion_error : UTF-8 영구 에러 로그 (포팅 항목 3)
+# ---------------------------------------------------------------------------
+class TestConversionErrorLog:
+    def test_writes_utf8_log_with_summary(self, tmp_path):
+        log_dir = tmp_path / "logs"
+        path = cc.log_conversion_error(
+            "한글파일.mkv",
+            1,
+            "ffmpeg version 8.1\nReal failure: could not open encoder",
+            log_dir=str(log_dir),
+        )
+        assert path is not None and os.path.exists(path)
+        content = open(path, encoding="utf-8").read()
+        assert "한글파일.mkv" in content
+        assert "Return Code: 1" in content
+        assert "could not open encoder" in content
+        # 부트 로그는 요약에서 제거됨
+        assert "ffmpeg version" not in content
+
+    def test_never_raises_on_bad_dir(self, tmp_path):
+        # 파일을 디렉터리 자리에 두어 makedirs 실패를 유도 → None 반환(예외 없음)
+        clash = tmp_path / "notadir"
+        clash.write_text("x")
+        result = cc.log_conversion_error(
+            "f.mkv", 1, "boom", log_dir=str(clash / "sub")
+        )
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# pipeline 포팅 동작: faststart 재시도 / stuck / remux→재인코딩 폴백
+# ---------------------------------------------------------------------------
+class TestPipelinePortedBehavior:
+    def _patch(self, monkeypatch, info, run_impl):
+        monkeypatch.setattr(pipeline, "get_video_info", lambda p: dict(info))
+        monkeypatch.setattr(pipeline, "run_ffmpeg_and_track", run_impl)
+
+    def test_faststart_invalid_argument_retries_without_faststart(
+        self, monkeypatch, tmp_path
+    ):
+        src = tmp_path / "movie.mkv"
+        src.write_bytes(b"orig" * 100)
+        cmds = []
+
+        def fake_run(cmd, total, cb, ev, output_path=None):
+            cmds.append(list(cmd))
+            out = output_path or cmd[-1]
+            if len(cmds) == 1:
+                # 1차: faststart 포함, trailer invalid argument 로 실패
+                assert "+faststart" in cmd
+                return 1, "Error writing trailer: Invalid argument"
+            # 2차: faststart 없이 재시도 → 성공
+            assert "+faststart" not in cmd
+            with open(out, "wb") as f:
+                f.write(b"ok" * 3000)
+            return 0, ""
+
+        self._patch(monkeypatch, ENCODE_INFO, fake_run)
+        status, msg = cc.process_video(
+            str(src), str(tmp_path), "suffix", "_c", dict(BASE_PV_SETTINGS)
+        )
+        assert status == "SUCCESS"
+        assert len(cmds) == 2
+        assert (tmp_path / "movie_c.mp4").exists()
+
+    def test_stuck_timeout_returns_fail(self, monkeypatch, tmp_path):
+        src = tmp_path / "movie.mkv"
+        src.write_bytes(b"orig" * 100)
+
+        def fake_run(cmd, total, cb, ev, output_path=None):
+            # 러너가 행 감지로 죽인 상황 재현: STUCK_TIMEOUT 마커 반환
+            return 1, "STUCK_TIMEOUT\nframe=10 time=00:00:01"
+
+        self._patch(monkeypatch, ENCODE_INFO, fake_run)
+        status, msg = cc.process_video(
+            str(src), str(tmp_path), "suffix", "_c", dict(BASE_PV_SETTINGS)
+        )
+        assert status == "FAIL"
+        assert "강제 종료" in msg
+        assert not any(".part-" in p.name for p in tmp_path.iterdir())
+
+    def test_remux_falls_back_to_reencode_on_codec_incompat(
+        self, monkeypatch, tmp_path
+    ):
+        src = tmp_path / "movie.mkv"
+        src.write_bytes(b"orig" * 100)
+        modes = []
+
+        def fake_run(cmd, total, cb, ev, output_path=None):
+            out = output_path or cmd[-1]
+            if "copy" in cmd:
+                # remux(-c copy) → mp4 코덱 비호환으로 실패(치명 입력오류 아님)
+                modes.append("remux")
+                return 1, "Could not write header ... codec not currently supported in container"
+            # 재인코딩 폴백 → 성공
+            modes.append("encode")
+            with open(out, "wb") as f:
+                f.write(b"enc" * 2000)
+            return 0, ""
+
+        self._patch(monkeypatch, REMUX_INFO, fake_run)
+        status, msg = cc.process_video(
+            str(src), str(tmp_path), "suffix", "_c", dict(BASE_PV_SETTINGS)
+        )
+        assert status == "SUCCESS"
+        assert modes[0] == "remux" and "encode" in modes
+        assert (tmp_path / "movie_c.mp4").exists()
+
+    def test_remux_fatal_input_error_does_not_fallback(self, monkeypatch, tmp_path):
+        src = tmp_path / "movie.mkv"
+        src.write_bytes(b"orig" * 100)
+        calls = {"n": 0}
+
+        def fake_run(cmd, total, cb, ev, output_path=None):
+            calls["n"] += 1
+            return 1, "movie.mkv: No such file or directory"
+
+        self._patch(monkeypatch, REMUX_INFO, fake_run)
+        status, msg = cc.process_video(
+            str(src), str(tmp_path), "suffix", "_c", dict(BASE_PV_SETTINGS)
+        )
+        assert status == "FAIL"
+        assert calls["n"] == 1  # 치명 입력오류는 재인코딩 폴백 없이 즉시 중단

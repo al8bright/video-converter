@@ -18,6 +18,11 @@ from ..config import (
     build_settings,
 )
 from ..core import get_video_info
+try:
+    from videoconverter.core import terminate_all_processes
+except ImportError:
+    terminate_all_processes = None
+
 from ..hardware import (
     get_nvidia_gpu_info,
     get_system_ram_gb,
@@ -38,6 +43,15 @@ from .widgets import ProgressSlotFrame, ScrollableQueueFrame
 
 
 BaseClass = build_base_class()
+
+
+def signal_conversion_shutdown(cancel_event, process_terminator):
+    """취소 이벤트를 설정하고 사용 가능한 변환 프로세스 종료기를 호출한다."""
+    cancel_event.set()
+    if process_terminator is None:
+        return False
+    process_terminator()
+    return True
 
 
 class VideoConverterApp(BaseClass):
@@ -83,7 +97,7 @@ class VideoConverterApp(BaseClass):
         self.total_count = 0
         self.batch_results = {}
         self.last_result_summary = ""
-        self.close_after_cancel = False
+        self.executor_thread = None
         self.ui_event_queue = queue.Queue()
         self._ui_loop_running = True
 
@@ -582,7 +596,6 @@ class VideoConverterApp(BaseClass):
         # UI Lock 적용
         self.is_processing = True
         self.cancel_event.clear()
-        self.close_after_cancel = False
         self.btn_start.configure(
             state="normal",
             command=self._request_cancel,
@@ -620,7 +633,7 @@ class VideoConverterApp(BaseClass):
 
         jobs = self.parallel_jobs.get()
         # 스레드풀 및 대기열 실행 스레드
-        threading.Thread(
+        self.executor_thread = threading.Thread(
             target=run_parallel_executor,
             args=(
                 items_to_process,
@@ -635,16 +648,37 @@ class VideoConverterApp(BaseClass):
                 self.ui_event_queue,
             ),
             daemon=True,
-        ).start()
+        )
+        self.executor_thread.start()
 
-    def _begin_cancel(self, close_after=False):
+    def _signal_conversion_shutdown(self):
+        try:
+            signal_conversion_shutdown(
+                self.cancel_event,
+                terminate_all_processes,
+            )
+        except Exception as exc:
+            print(f"변환 프로세스 종료 중 오류: {exc}")
+
+    def _wait_for_executor_shutdown(self, timeout=1.0):
+        worker = self.executor_thread
+        if (
+            worker is not None
+            and worker is not threading.current_thread()
+            and worker.is_alive()
+        ):
+            worker.join(timeout=timeout)
+
+    def _shutdown_app(self):
+        self._signal_conversion_shutdown()
+        self._wait_for_executor_shutdown()
+        self._ui_loop_running = False
+        self.destroy()
+
+    def _begin_cancel(self):
         if not self.is_processing:
             return
-        if close_after:
-            self.close_after_cancel = True
-        if self.cancel_event.is_set():
-            return
-        self.cancel_event.set()
+        self._signal_conversion_shutdown()
         self.btn_start.configure(
             state="disabled",
             fg_color=theme.COLOR_DISABLED,
@@ -653,6 +687,7 @@ class VideoConverterApp(BaseClass):
         self.lbl_progress.configure(
             text=f"취소 요청 중 ({self.processed_count}/{self.total_count})"
         )
+        self._wait_for_executor_shutdown()
 
     def _request_cancel(self):
         if not self.is_processing:
@@ -668,8 +703,7 @@ class VideoConverterApp(BaseClass):
 
     def _on_close_requested(self):
         if not self.is_processing:
-            self._ui_loop_running = False
-            self.destroy()
+            self._shutdown_app()
             return
 
         confirmed = messagebox.askyesno(
@@ -679,10 +713,11 @@ class VideoConverterApp(BaseClass):
             parent=self,
         )
         if confirmed:
-            self._begin_cancel(close_after=True)
+            self._shutdown_app()
 
     def _on_conversion_finished(self):
         self.is_processing = False
+        self.executor_thread = None
         counts = summarize_item_states(self.batch_results.values())
         self.last_result_summary = format_result_summary(counts)
         self.btn_start.configure(
@@ -713,10 +748,6 @@ class VideoConverterApp(BaseClass):
             messagebox.showwarning("작업 결과 확인", detail, parent=self)
         else:
             messagebox.showinfo("작업 완료", detail, parent=self)
-
-        if self.close_after_cancel:
-            self._ui_loop_running = False
-            self.destroy()
 
     def _show_help_popup(self):
         """세련된 도움말/팁 안내 팝업창(Toplevel) 호출"""

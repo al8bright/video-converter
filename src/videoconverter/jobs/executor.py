@@ -2,7 +2,7 @@
 
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from enum import Enum
 
 from .. import theme
@@ -102,6 +102,25 @@ def empty_slot_data():
     }
 
 
+def cancel_pending_futures(future_items, ui_event_queue):
+    """시작하지 않은 future를 취소하고 각 항목의 취소 결과를 알린다."""
+    cancelled = set()
+    for future, item in future_items.items():
+        if future.cancelled():
+            continue
+        if future.cancel():
+            cancelled.add(future)
+            ui_event_queue.put(
+                (
+                    "item_result",
+                    item,
+                    QueueItemState.CANCELLED,
+                    "변환 시작 전에 사용자가 작업을 취소했습니다.",
+                )
+            )
+    return cancelled
+
+
 def run_parallel_executor(
     items,
     settings,
@@ -115,26 +134,49 @@ def run_parallel_executor(
     ui_event_queue,
 ):
     """기존 ThreadPoolExecutor 배치 구동을 GUI 밖에서 실행한다."""
+    executor = ThreadPoolExecutor(max_workers=jobs)
     try:
-        with ThreadPoolExecutor(max_workers=jobs) as executor:
-            futures = []
-            for item in items:
-                future = executor.submit(
-                    encode_task_worker,
-                    item,
-                    settings,
-                    output_dir,
-                    name_option,
-                    value,
-                    jobs,
-                    cancel_event,
-                    slot_data,
-                    slot_lock,
-                    ui_event_queue,
-                )
-                futures.append((item, future))
+        future_items = {}
+        for item in items:
+            future = executor.submit(
+                encode_task_worker,
+                item,
+                settings,
+                output_dir,
+                name_option,
+                value,
+                jobs,
+                cancel_event,
+                slot_data,
+                slot_lock,
+                ui_event_queue,
+            )
+            future_items[future] = item
 
-            for item, future in futures:
+        pending = set(future_items)
+        cancellation_reported = set()
+        while pending:
+            if cancel_event.is_set():
+                cancellation_reported.update(
+                    cancel_pending_futures(
+                        {
+                            future: future_items[future]
+                            for future in pending
+                            if future not in cancellation_reported
+                        },
+                        ui_event_queue,
+                    )
+                )
+
+            done, pending = wait(
+                pending,
+                timeout=0.1,
+                return_when=FIRST_COMPLETED,
+            )
+            for future in done:
+                if future.cancelled():
+                    continue
+                item = future_items[future]
                 try:
                     future.result()
                 except Exception as exc:
@@ -147,6 +189,10 @@ def run_parallel_executor(
                         )
                     )
     finally:
+        executor.shutdown(
+            wait=True,
+            cancel_futures=cancel_event.is_set(),
+        )
         ui_event_queue.put(("batch_finished",))
 
 
@@ -233,4 +279,3 @@ def encode_task_worker(
                 }:
                     slot["pct"] = 100.0
         ui_event_queue.put(("item_result", item, state, message))
-

@@ -9,16 +9,27 @@ CTk 위젯 생성이나 이벤트 루프(mainloop)가 필요한 코드는 대상
 각 신규 모듈은 위젯을 인스턴스화하지 않고 임포트만 하므로 헤드리스에서도 안전하다.
 """
 import os
+import queue
+import threading
+from concurrent.futures import Future
+from types import SimpleNamespace
 
 import pytest
 
 from videoconverter.config import SUPPORTED_EXTENSIONS
+from videoconverter.gui.app import (
+    VideoConverterApp,
+    signal_conversion_shutdown,
+)
 from videoconverter.gui.dnd import parse_dropped_files
 from videoconverter.hardware import recommend_parallel_jobs
 from videoconverter.jobs.executor import (
     QueueItemState,
+    cancel_pending_futures,
+    empty_slot_data,
     format_result_summary,
     process_status_to_state,
+    run_parallel_executor,
     should_reprocess,
     summarize_item_states,
 )
@@ -240,3 +251,151 @@ class TestResultSummary:
         assert "원본삭제 1" in summary
         assert "실패 1개" in summary
         assert "취소 1개" in summary
+
+
+class TestConversionShutdown:
+    def test_shutdown_sets_event_and_terminates_processes(self):
+        cancel_event = threading.Event()
+        calls = []
+
+        called = signal_conversion_shutdown(
+            cancel_event,
+            lambda: calls.append("terminated"),
+        )
+
+        assert called
+        assert cancel_event.is_set()
+        assert calls == ["terminated"]
+
+    def test_shutdown_without_available_terminator_still_sets_event(self):
+        cancel_event = threading.Event()
+
+        called = signal_conversion_shutdown(cancel_event, None)
+
+        assert not called
+        assert cancel_event.is_set()
+
+    def test_pending_futures_are_cancelled_and_reported(self):
+        first_item = object()
+        second_item = object()
+        first_future = Future()
+        second_future = Future()
+        event_queue = queue.Queue()
+
+        cancelled = cancel_pending_futures(
+            {
+                first_future: first_item,
+                second_future: second_item,
+            },
+            event_queue,
+        )
+
+        assert cancelled == {first_future, second_future}
+        assert first_future.cancelled()
+        assert second_future.cancelled()
+        events = [event_queue.get_nowait(), event_queue.get_nowait()]
+        assert {event[1] for event in events} == {first_item, second_item}
+        assert all(event[0] == "item_result" for event in events)
+        assert all(event[2] == QueueItemState.CANCELLED for event in events)
+
+        assert cancel_pending_futures(
+            {
+                first_future: first_item,
+                second_future: second_item,
+            },
+            event_queue,
+        ) == set()
+        assert event_queue.empty()
+
+    def test_running_future_is_not_reported_as_pending_cancellation(self):
+        item = object()
+        running_future = Future()
+        assert running_future.set_running_or_notify_cancel()
+        event_queue = queue.Queue()
+
+        cancelled = cancel_pending_futures(
+            {running_future: item},
+            event_queue,
+        )
+
+        assert cancelled == set()
+        assert event_queue.empty()
+
+    def test_close_without_active_conversion_always_runs_cleanup(self):
+        class DummyApp:
+            is_processing = False
+            cleanup_calls = 0
+
+            def _shutdown_app(self):
+                self.cleanup_calls += 1
+
+        app = DummyApp()
+
+        VideoConverterApp._on_close_requested(app)
+
+        assert app.cleanup_calls == 1
+
+    @pytest.mark.parametrize(
+        "confirmed,expected_cleanup_calls",
+        [(False, 0), (True, 1)],
+    )
+    def test_active_close_respects_confirmation(
+        self,
+        monkeypatch,
+        confirmed,
+        expected_cleanup_calls,
+    ):
+        class DummyApp:
+            is_processing = True
+            cleanup_calls = 0
+
+            def _shutdown_app(self):
+                self.cleanup_calls += 1
+
+        app = DummyApp()
+        monkeypatch.setattr(
+            "videoconverter.gui.app.messagebox.askyesno",
+            lambda *args, **kwargs: confirmed,
+        )
+
+        VideoConverterApp._on_close_requested(app)
+
+        assert app.cleanup_calls == expected_cleanup_calls
+
+    def test_cancelled_batch_reports_every_item_and_finishes(self):
+        items = [
+            SimpleNamespace(file_path=f"video-{index}.mp4")
+            for index in range(6)
+        ]
+        cancel_event = threading.Event()
+        cancel_event.set()
+        event_queue = queue.Queue()
+
+        run_parallel_executor(
+            items,
+            {},
+            "",
+            "suffix",
+            "_cuda",
+            1,
+            cancel_event,
+            {0: empty_slot_data()},
+            threading.Lock(),
+            event_queue,
+        )
+
+        events = []
+        while not event_queue.empty():
+            events.append(event_queue.get_nowait())
+        result_events = [
+            event for event in events if event[0] == "item_result"
+        ]
+        assert len(result_events) == len(items)
+        assert {id(event[1]) for event in result_events} == {
+            id(item) for item in items
+        }
+        assert all(
+            event[2] == QueueItemState.CANCELLED
+            for event in result_events
+        )
+        assert events[-1] == ("batch_finished",)

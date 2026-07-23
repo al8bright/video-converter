@@ -7,11 +7,14 @@ from ..config import (
     REMUX_THRESHOLD_MBPS,
     TEXT_SUB_CODECS,
 )
+from .errorlog import log_conversion_error
 from .ffmpeg_cmd import (
     _build_ffmpeg_cmd,
     _force_mp4_ext,
+    _output_wants_faststart,
     _safe_remove,
     _stderr_suggests_fatal_input_error,
+    _stderr_suggests_faststart_failure,
     _stderr_suggests_nvenc_fail,
     _tmp_is_valid,
     _tmp_output_path,
@@ -20,6 +23,18 @@ from .ffmpeg_cmd import (
 )
 from .probe import get_video_info
 from .runner import run_ffmpeg_and_track
+
+_STUCK_MARKER = "STUCK_TIMEOUT"
+
+
+def _is_stuck(stderr_text):
+    return isinstance(stderr_text, str) and stderr_text.startswith(_STUCK_MARKER)
+
+
+def _strip_stuck_marker(stderr_text):
+    if _is_stuck(stderr_text):
+        return stderr_text[len(_STUCK_MARKER):].lstrip("\n")
+    return stderr_text
 
 
 def process_video(
@@ -42,14 +57,16 @@ def process_video(
     def _cancelled():
         return bool(cancel_event and cancel_event.is_set())
 
+    def _is_cancel(stderr_text):
+        return _cancelled() or stderr_text == "USER_CANCELLED"
+
+    display_name = os.path.basename(file_path)
     src_path = os.path.abspath(os.path.normpath(file_path))
     max_width = settings.get("max_width", 1920)
     max_height = settings.get("max_height", 1080)
     need_scale = info["width"] > max_width or info["height"] > max_height
 
-    remux_threshold = settings.get(
-        "remux_threshold_mbps", REMUX_THRESHOLD_MBPS
-    )
+    remux_threshold = settings.get("remux_threshold_mbps", REMUX_THRESHOLD_MBPS)
     try:
         size_bytes = os.path.getsize(file_path)
     except OSError:
@@ -62,13 +79,15 @@ def process_video(
         need_scale,
     )
 
-    dest_path = os.path.abspath(
-        os.path.normpath(
-            resolve_output_path(file_path, output_dir, name_option, value)
+    # 출력은 remux/재인코딩 모두 .mp4 로 통일한다(item 5).
+    # remux(-c copy)를 mp4 로 담다가 코덱 비호환으로 실패하면 재인코딩 경로로 폴백한다.
+    dest_path = _force_mp4_ext(
+        os.path.abspath(
+            os.path.normpath(
+                resolve_output_path(file_path, output_dir, name_option, value)
+            )
         )
     )
-    if not remux_only:
-        dest_path = _force_mp4_ext(dest_path)
     dest_dir = os.path.dirname(dest_path)
     if dest_dir:
         os.makedirs(dest_dir, exist_ok=True)
@@ -79,9 +98,7 @@ def process_video(
         "force_original_aspect_ratio=decrease,"
         "pad=ceil(iw/2)*2:ceil(ih/2)*2"
     )
-    base_vf = (
-        scale_filter if need_scale else "pad=ceil(iw/2)*2:ceil(ih/2)*2"
-    )
+    base_vf = scale_filter if need_scale else "pad=ceil(iw/2)*2:ceil(ih/2)*2"
     vf = f"{base_vf},format=yuv420p"
     total_sec = info["duration_sec"]
     faststart = settings.get("faststart", FASTSTART_DEFAULT)
@@ -91,6 +108,50 @@ def process_video(
         if str(codec).lower() in TEXT_SUB_CODECS
     ]
     tmp_path = _tmp_output_path(dest_path)
+
+    def _run(cmd):
+        # 항상 5개 위치 인자만 전달(테스트가 monkeypatch 하는 시그니처와 일치).
+        return run_ffmpeg_and_track(
+            cmd, total_sec, progress_callback, cancel_event, tmp_path
+        )
+
+    def _attempt(is_remux, mode):
+        """한 번의 변환 시도. faststart 트레일러 오류면 faststart 없이 1회 재시도."""
+        def build(use_faststart):
+            if is_remux:
+                return _build_ffmpeg_cmd(
+                    src_path, tmp_path, True, "", use_faststart, "cpu", settings
+                )
+            return _build_ffmpeg_cmd(
+                src_path,
+                tmp_path,
+                False,
+                vf,
+                use_faststart,
+                mode,
+                settings,
+                text_sub_indices,
+            )
+
+        rc, stderr_text = _run(build(faststart))
+        if (
+            rc != 0
+            and not _is_cancel(stderr_text)
+            and not _is_stuck(stderr_text)
+            and faststart
+            and _output_wants_faststart(dest_path)
+            and _stderr_suggests_faststart_failure(stderr_text)
+        ):
+            _safe_remove(tmp_path)
+            rc, stderr_text = _run(build(False))
+        return rc, stderr_text
+
+    def _fail(msg, rc, stderr_text, reason=""):
+        _safe_remove(tmp_path)
+        log_conversion_error(
+            display_name, rc, _strip_stuck_marker(stderr_text), reason=reason
+        )
+        return "FAIL", msg
 
     def _finalize_success(mode_label, copy=False):
         if not _tmp_is_valid(tmp_path):
@@ -117,70 +178,53 @@ def process_video(
                 return "SUCCESS", f"변환 완료 (원본 삭제 실패: {exc})"
         return "SUCCESS", f"변환 완료 (모드: {mode_label})"
 
+    _STUCK_MSG = "진행 없음으로 강제 종료 (STUCK_TIMEOUT_SEC 초과)"
+
     try:
+        # ---- Remux 경로 ----
         if remux_only:
-            cmd = _build_ffmpeg_cmd(
-                src_path, tmp_path, True, "", faststart, "cpu", settings
-            )
-            rc, stderr_full = run_ffmpeg_and_track(
-                cmd,
-                total_sec,
-                progress_callback,
-                cancel_event,
-                tmp_path,
-            )
-            if _cancelled() or stderr_full == "USER_CANCELLED":
+            rc, stderr_text = _attempt(True, "cpu")
+            if _is_cancel(stderr_text):
                 _safe_remove(tmp_path)
                 return "CANCELLED", "사용자 취소됨"
+            if _is_stuck(stderr_text):
+                return _fail(_STUCK_MSG, rc, stderr_text, reason=" (진행 없음으로 강제 종료)")
             if rc == 0:
                 return _finalize_success("remux", copy=True)
+            # remux 실패: 경로/입력 치명 오류면 중단, 아니면 재인코딩으로 폴백.
             _safe_remove(tmp_path)
-            return "FAIL", f"Remux 실패 (코드: {rc})"
+            if _stderr_suggests_fatal_input_error(stderr_text):
+                return _fail("입력/출력 경로 오류로 변환 중단", rc, stderr_text)
+            print(
+                "Remux(mp4 -c copy) 실패 -> 재인코딩 경로로 폴백 "
+                f"({file_path})"
+            )
+            remux_only = False  # 아래 재인코딩 체인으로 진행
 
+        # ---- 재인코딩 경로 (단계별 폴백) ----
         mode = "cuda"
-        cmd = _build_ffmpeg_cmd(
-            src_path,
-            tmp_path,
-            False,
-            vf,
-            faststart,
-            mode,
-            settings,
-            text_sub_indices,
-        )
-        rc, stderr_full = run_ffmpeg_and_track(
-            cmd, total_sec, progress_callback, cancel_event, tmp_path
-        )
-        if _cancelled() or stderr_full == "USER_CANCELLED":
+        rc, stderr_text = _attempt(False, mode)
+        if _is_cancel(stderr_text):
             _safe_remove(tmp_path)
             return "CANCELLED", "사용자 취소됨"
+        if _is_stuck(stderr_text):
+            return _fail(_STUCK_MSG, rc, stderr_text, reason=" (진행 없음으로 강제 종료)")
 
-        if rc != 0 and _stderr_suggests_fatal_input_error(stderr_full):
-            _safe_remove(tmp_path)
-            return "FAIL", "입력/출력 경로 오류로 변환 중단"
+        if rc != 0 and _stderr_suggests_fatal_input_error(stderr_text):
+            return _fail("입력/출력 경로 오류로 변환 중단", rc, stderr_text)
 
-        if rc != 0 and _stderr_suggests_nvenc_fail(stderr_full):
+        if rc != 0 and _stderr_suggests_nvenc_fail(stderr_text):
             print(
                 "CUDA 하드웨어 디코드 실패 -> CPU 디코딩 + GPU 인코딩 "
                 f"폴백 시도 ({file_path})"
             )
             mode = "cpu_decode"
-            cmd = _build_ffmpeg_cmd(
-                src_path,
-                tmp_path,
-                False,
-                vf,
-                faststart,
-                mode,
-                settings,
-                text_sub_indices,
-            )
-            rc, stderr_full = run_ffmpeg_and_track(
-                cmd, total_sec, progress_callback, cancel_event, tmp_path
-            )
-            if _cancelled() or stderr_full == "USER_CANCELLED":
+            rc, stderr_text = _attempt(False, mode)
+            if _is_cancel(stderr_text):
                 _safe_remove(tmp_path)
                 return "CANCELLED", "사용자 취소됨"
+            if _is_stuck(stderr_text):
+                return _fail(_STUCK_MSG, rc, stderr_text, reason=" (진행 없음으로 강제 종료)")
 
         if rc != 0:
             print(
@@ -188,28 +232,17 @@ def process_video(
                 f"시도 ({file_path})"
             )
             mode = "cpu"
-            cmd = _build_ffmpeg_cmd(
-                src_path,
-                tmp_path,
-                False,
-                vf,
-                faststart,
-                mode,
-                settings,
-                text_sub_indices,
-            )
-            rc, stderr_full = run_ffmpeg_and_track(
-                cmd, total_sec, progress_callback, cancel_event, tmp_path
-            )
-            if _cancelled() or stderr_full == "USER_CANCELLED":
+            rc, stderr_text = _attempt(False, mode)
+            if _is_cancel(stderr_text):
                 _safe_remove(tmp_path)
                 return "CANCELLED", "사용자 취소됨"
+            if _is_stuck(stderr_text):
+                return _fail(_STUCK_MSG, rc, stderr_text, reason=" (진행 없음으로 강제 종료)")
 
         if rc == 0:
             return _finalize_success(mode, copy=False)
-        _safe_remove(tmp_path)
-        return "FAIL", f"인코딩 오류 (반환코드: {rc})"
+        return _fail(f"인코딩 오류 (반환코드: {rc})", rc, stderr_text)
     except Exception as exc:
         _safe_remove(tmp_path)
+        log_conversion_error(display_name, -1, str(exc))
         return "FAIL", f"변환 예외: {exc}"
-
