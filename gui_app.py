@@ -7,6 +7,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
 import customtkinter as ctk
 
 # core_converter에서 핵심 변환 모듈 임포트
@@ -27,6 +28,88 @@ ctk.set_default_color_theme("blue")
 
 # 지원하는 비디오 확장자
 SUPPORTED_EXTENSIONS = (".mkv", ".avi", ".mov", ".wmv", ".mp4", ".m4v", ".ts")
+
+
+class QueueItemState(str, Enum):
+    """표시 문구와 분리된 대기열 항목의 내부 상태."""
+
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    COPY = "COPY"
+    SUCCESS_DEL = "SUCCESS_DEL"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+PROCESS_STATUS_TO_STATE = {
+    "SUCCESS": QueueItemState.SUCCESS,
+    "SUCCESS_DEL": QueueItemState.SUCCESS_DEL,
+    "COPY": QueueItemState.COPY,
+    "FAIL": QueueItemState.FAILED,
+    "CANCELLED": QueueItemState.CANCELLED,
+}
+
+STATE_PRESENTATION = {
+    QueueItemState.QUEUED: ("대기", "#E5C158"),
+    QueueItemState.RUNNING: ("변환 중...", "#F77F00"),
+    QueueItemState.SUCCESS: ("완료", "#06D6A0"),
+    QueueItemState.COPY: ("복사완료", "#06D6A0"),
+    QueueItemState.SUCCESS_DEL: ("완료(삭제)", "#06D6A0"),
+    QueueItemState.FAILED: ("실패 ⓘ", "#FF007F"),
+    QueueItemState.CANCELLED: ("취소됨 ⓘ", "#FF007F"),
+}
+
+
+def process_status_to_state(status):
+    """process_video 반환 상태를 내부 상태로 변환한다."""
+    return PROCESS_STATUS_TO_STATE.get(status, QueueItemState.FAILED)
+
+
+def should_reprocess(state):
+    """명시적으로 대기 중인 항목만 새 배치의 처리 대상으로 삼는다."""
+    try:
+        normalized = state if isinstance(state, QueueItemState) else QueueItemState(state)
+    except (TypeError, ValueError):
+        return False
+    return normalized == QueueItemState.QUEUED
+
+
+def summarize_item_states(states):
+    """완료 팝업에 사용할 상태별 건수를 항상 동일한 키로 반환한다."""
+    counts = {
+        QueueItemState.SUCCESS: 0,
+        QueueItemState.COPY: 0,
+        QueueItemState.SUCCESS_DEL: 0,
+        QueueItemState.FAILED: 0,
+        QueueItemState.CANCELLED: 0,
+    }
+    for state in states:
+        try:
+            normalized = state if isinstance(state, QueueItemState) else QueueItemState(state)
+        except (TypeError, ValueError):
+            continue
+        if normalized in counts:
+            counts[normalized] += 1
+    return counts
+
+
+def format_result_summary(counts):
+    """상태 집계를 사용자용 한 줄 요약으로 만든다."""
+    completed = (
+        counts[QueueItemState.SUCCESS]
+        + counts[QueueItemState.COPY]
+        + counts[QueueItemState.SUCCESS_DEL]
+    )
+    return (
+        f"완료 {completed}개 "
+        f"(변환 {counts[QueueItemState.SUCCESS]} / "
+        f"복사 {counts[QueueItemState.COPY]} / "
+        f"원본삭제 {counts[QueueItemState.SUCCESS_DEL]}) · "
+        f"실패 {counts[QueueItemState.FAILED]}개 · "
+        f"취소 {counts[QueueItemState.CANCELLED]}개"
+    )
+
 
 def parse_dropped_files(dropped_str):
     """
@@ -57,6 +140,8 @@ class QueueItemFrame(ctk.CTkFrame):
         super().__init__(master, fg_color="#1E1E2E", corner_radius=6, **kwargs)
         self.file_path = file_path
         self.video_info = None
+        self.state = QueueItemState.QUEUED
+        self.result_message = ""
 
         filename = os.path.basename(file_path)
         self.name_label = ctk.CTkLabel(
@@ -84,6 +169,7 @@ class QueueItemFrame(ctk.CTkFrame):
             self, text="대기", width=90, font=("Malgun Gothic", 11, "bold"), text_color="#E5C158"
         )
         self.status_label.pack(side="left", padx=5)
+        self.status_label.bind("<Button-1>", self._show_result_detail)
 
         # 개별 제거 버튼
         self.del_btn = ctk.CTkButton(
@@ -98,10 +184,22 @@ class QueueItemFrame(ctk.CTkFrame):
         )
         self.del_btn.pack(side="right", padx=(5, 10))
 
-    def update_status(self, status, text_color=None):
-        self.status_label.configure(text=status)
-        if text_color:
-            self.status_label.configure(text_color=text_color)
+    def set_state(self, state, message=""):
+        """내부 상태를 바꾸고 해당 표시 문구를 UI에 반영한다."""
+        self.state = state if isinstance(state, QueueItemState) else QueueItemState(state)
+        self.result_message = message or ""
+        text, text_color = STATE_PRESENTATION[self.state]
+        self.status_label.configure(
+            text=text,
+            text_color=text_color,
+            cursor="hand2" if self.result_message else "arrow",
+        )
+
+    def _show_result_detail(self, _event=None):
+        if not self.result_message:
+            return
+        title = "실패 상세" if self.state == QueueItemState.FAILED else "작업 상세"
+        messagebox.showinfo(title, self.result_message, parent=self.winfo_toplevel())
 
 
 class ScrollableQueueFrame(ctk.CTkScrollableFrame):
@@ -174,8 +272,8 @@ class VideoConverterApp(BaseClass):
         super().__init__()
 
         self.title("CUDA/NVENC Video Converter v1.0.0")
-        self.geometry("820x760")
-        self.minsize(780, 700)
+        self.geometry("820x820")
+        self.minsize(780, 650)
 
         # 윈도우 타이틀바 아이콘 지정
         try:
@@ -207,7 +305,7 @@ class VideoConverterApp(BaseClass):
         self.video_bitrate = ctk.StringVar(value="3.5")
         self.audio_bitrate = ctk.StringVar(value="128k")
         self.resolution_limit = ctk.StringVar(value="1080p (FHD)")
-        self.delete_source = ctk.BooleanVar(value=True)
+        self.delete_source = ctk.BooleanVar(value=False)
 
 
         self.save_mode = ctk.StringVar(value="same")
@@ -219,14 +317,20 @@ class VideoConverterApp(BaseClass):
         self.cancel_event = threading.Event()
         self.processed_count = 0
         self.total_count = 0
+        self.batch_results = {}
+        self.last_result_summary = ""
+        self.close_after_cancel = False
+        self.ui_event_queue = queue.Queue()
+        self._ui_loop_running = True
 
         # 병렬 진행 슬롯 데이터 스토리지
-        # 구조: { slot_id: { 'filename': str, 'pct': float, 'time_str': str, 'speed': str, 'active': bool } }
-        self.slot_data = {i: {'filename': '대기 중...', 'pct': 0.0, 'time_str': '-', 'speed': '-', 'active': False} for i in range(8)}
+        # 구조: { slot_id: {filename, pct, time_str, speed, active, visible, result_text} }
+        self.slot_data = {i: self._empty_slot_data() for i in range(8)}
         self.slot_lock = threading.Lock()
 
         # UI 위젯 생성
         self._create_widgets()
+        self.protocol("WM_DELETE_WINDOW", self._on_close_requested)
 
         # UI 업데이트 루프 가동 (100ms 주기로 슬롯 갱신)
         self._update_ui_loop()
@@ -293,10 +397,10 @@ class VideoConverterApp(BaseClass):
 
         # 2.1 동시 작업수 슬라이더
         lbl_jobs = ctk.CTkLabel(self.settings_panel, text="동시 변환 작업 수:", font=("Malgun Gothic", 11, "bold"))
-        lbl_jobs.grid(row=0, column=0, padx=15, pady=8, sticky="w")
+        lbl_jobs.grid(row=0, column=0, padx=15, pady=5, sticky="w")
         
         slider_frame = ctk.CTkFrame(self.settings_panel, fg_color="transparent")
-        slider_frame.grid(row=0, column=1, padx=15, pady=8, sticky="ew")
+        slider_frame.grid(row=0, column=1, padx=15, pady=5, sticky="ew")
         
         self.slider_jobs = ctk.CTkSlider(
             slider_frame, from_=1, to=8, number_of_steps=7, variable=self.parallel_jobs, command=self._on_jobs_slider_changed, height=16
@@ -309,38 +413,42 @@ class VideoConverterApp(BaseClass):
 
         # 2.2 비트레이트 설정
         lbl_v_bitrate = ctk.CTkLabel(self.settings_panel, text="최대 비디오 대역폭:", font=("Malgun Gothic", 11, "bold"))
-        lbl_v_bitrate.grid(row=0, column=2, padx=15, pady=8, sticky="w")
+        lbl_v_bitrate.grid(row=0, column=2, padx=15, pady=5, sticky="w")
 
         combo_v_bitrate = ctk.CTkOptionMenu(
             self.settings_panel, values=["5.0", "4.0", "3.5", "2.5", "1.5"], variable=self.video_bitrate, width=90, height=24
         )
-        combo_v_bitrate.grid(row=0, column=3, padx=15, pady=8, sticky="w")
+        combo_v_bitrate.grid(row=0, column=3, padx=15, pady=5, sticky="w")
 
         # 2.3 오디오 비트레이트 & 해상도 한도 & 원본 삭제 토글
         lbl_a_bitrate = ctk.CTkLabel(self.settings_panel, text="오디오 비트레이트:", font=("Malgun Gothic", 11, "bold"))
-        lbl_a_bitrate.grid(row=1, column=0, padx=15, pady=8, sticky="w")
+        lbl_a_bitrate.grid(row=1, column=0, padx=15, pady=5, sticky="w")
 
         combo_a_bitrate = ctk.CTkOptionMenu(
             self.settings_panel, values=["192k", "128k", "96k"], variable=self.audio_bitrate, width=100, height=24
         )
-        combo_a_bitrate.grid(row=1, column=1, padx=15, pady=8, sticky="w")
+        combo_a_bitrate.grid(row=1, column=1, padx=15, pady=5, sticky="w")
 
         lbl_res = ctk.CTkLabel(self.settings_panel, text="해상도 제한:", font=("Malgun Gothic", 11, "bold"))
-        lbl_res.grid(row=1, column=2, padx=15, pady=8, sticky="w")
+        lbl_res.grid(row=1, column=2, padx=15, pady=5, sticky="w")
 
         combo_res = ctk.CTkOptionMenu(
             self.settings_panel, values=["1080p (FHD)", "720p (HD)", "제한 없음"], variable=self.resolution_limit, width=110, height=24
         )
-        combo_res.grid(row=1, column=3, padx=15, pady=8, sticky="w")
+        combo_res.grid(row=1, column=3, padx=15, pady=5, sticky="w")
 
         self.chk_delete_src = ctk.CTkSwitch(
-            self.settings_panel, text="변환 완료 후 원본 파일 자동 삭제", variable=self.delete_source, font=("Malgun Gothic", 11, "bold")
+            self.settings_panel,
+            text="변환 완료 후 원본 파일 자동 삭제",
+            variable=self.delete_source,
+            command=self._on_delete_source_toggle,
+            font=("Malgun Gothic", 11, "bold")
         )
-        self.chk_delete_src.grid(row=2, column=0, columnspan=2, padx=15, pady=8, sticky="w")
+        self.chk_delete_src.grid(row=2, column=0, columnspan=2, padx=15, pady=5, sticky="w")
 
         # 2.4 저장 및 파일명 변경 규칙
         lbl_save_loc = ctk.CTkLabel(self.settings_panel, text="저장 위치 설정:", font=("Malgun Gothic", 11, "bold"))
-        lbl_save_loc.grid(row=3, column=0, padx=15, pady=6, sticky="nw")
+        lbl_save_loc.grid(row=3, column=0, padx=15, pady=4, sticky="nw")
 
         save_loc_frame = ctk.CTkFrame(self.settings_panel, fg_color="transparent")
         save_loc_frame.grid(row=3, column=1, columnspan=3, padx=15, pady=6, sticky="ew")
@@ -397,12 +505,11 @@ class VideoConverterApp(BaseClass):
             height=24,
             command=self._show_help_popup
         )
-        self.btn_help.grid(row=2, column=2, columnspan=2, padx=15, pady=8, sticky="e")
+        self.btn_help.grid(row=2, column=2, columnspan=2, padx=15, pady=5, sticky="e")
 
 
-        # 3. 실시간 병렬 인코딩 대시보드 영역 (실시간 진행 상황 뷰어)
+        # 3. 실시간 병렬 인코딩 대시보드 영역 (실시간 진행 상황 뷰어 - 처음엔 grid하지 않고 변환 시작 시 노출)
         self.dashboard_panel = ctk.CTkFrame(self, fg_color="#13131F", corner_radius=8)
-        self.dashboard_panel.grid(row=3, column=0, padx=15, pady=6, sticky="ew")
 
         lbl_dash = ctk.CTkLabel(self.dashboard_panel, text="현재 실행 중인 변환 작업", font=("Malgun Gothic", 12, "bold"), text_color="#A0A0B0")
         lbl_dash.pack(anchor="w", padx=15, pady=(8, 4))
@@ -462,6 +569,18 @@ class VideoConverterApp(BaseClass):
         self.btn_start.grid(row=1, column=2, padx=5, sticky="e")
 
 
+    @staticmethod
+    def _empty_slot_data():
+        return {
+            'filename': '대기 중...',
+            'pct': 0.0,
+            'time_str': '-',
+            'speed': '-',
+            'active': False,
+            'visible': False,
+            'result_text': '',
+        }
+
     def _arrange_progress_slots(self):
         """설정된 동시 변환 개수(PARALLEL_JOBS)에 맞게 진행바 슬롯 위젯을 노출/배치"""
         jobs = self.parallel_jobs.get()
@@ -487,6 +606,19 @@ class VideoConverterApp(BaseClass):
         else:
             self.entry_custom_path.configure(state="disabled")
             self.btn_browse_out.configure(state="disabled")
+
+    def _on_delete_source_toggle(self):
+        if not self.delete_source.get() or self.save_mode.get() != "same":
+            return
+        confirmed = messagebox.askyesno(
+            "원본 파일 삭제 경고",
+            "이 옵션을 켜면 변환에 성공한 원본 파일이 영구 삭제됩니다.\n"
+            "현재 저장 위치도 원본과 같은 폴더입니다.\n\n"
+            "원본 자동 삭제를 사용하시겠습니까?",
+            parent=self,
+        )
+        if not confirmed:
+            self.delete_source.set(False)
 
     def _toggle_name_ui(self):
         opt = self.name_option.get()
@@ -552,6 +684,12 @@ class VideoConverterApp(BaseClass):
         if self.is_processing:
             return
         self.queue_frame.clear()
+        self.batch_results.clear()
+        self.last_result_summary = ""
+        with self.slot_lock:
+            for idx in range(8):
+                self.slot_data[idx] = self._empty_slot_data()
+        self.dashboard_panel.grid_forget()
         self._update_progress_display()
         self.overall_progress_bar.set(0.0)
 
@@ -561,6 +699,11 @@ class VideoConverterApp(BaseClass):
             self.lbl_progress.configure(text=f"처리 중 ({self.processed_count}/{self.total_count})")
             prog_val = self.processed_count / max(1, self.total_count)
             self.overall_progress_bar.set(prog_val)
+        elif self.last_result_summary:
+            self.lbl_progress.configure(text=self.last_result_summary)
+            self.overall_progress_bar.set(
+                self.processed_count / max(1, self.total_count)
+            )
         else:
             self.lbl_progress.configure(text=f"대기 중 ({count}개 파일)")
             self.overall_progress_bar.set(0.0)
@@ -571,21 +714,53 @@ class VideoConverterApp(BaseClass):
             try:
                 info = get_video_info(item.file_path)
                 if info:
-                    item.video_info = info
                     res_text = f"{info['width']}x{info['height']}"
-                    item.res_label.configure(text=res_text)
                 else:
-                    item.res_label.configure(text="분석 실패")
-            except Exception:
-                item.res_label.configure(text="에러")
+                    res_text = "분석 실패"
+                self.ui_event_queue.put(("analysis_result", item, info, res_text))
+            except Exception as exc:
+                self.ui_event_queue.put(
+                    ("analysis_result", item, None, f"에러: {exc}")
+                )
+
+    def _drain_ui_events(self):
+        while True:
+            try:
+                event = self.ui_event_queue.get_nowait()
+            except queue.Empty:
+                break
+
+            event_type = event[0]
+            if event_type == "analysis_result":
+                _, item, info, res_text = event
+                if item in self.queue_frame.items:
+                    item.video_info = info
+                    item.res_label.configure(text=res_text)
+            elif event_type == "item_state":
+                _, item, state, message = event
+                if item in self.queue_frame.items:
+                    item.set_state(state, message)
+            elif event_type == "item_result":
+                _, item, state, message = event
+                self.batch_results[item] = state
+                if item in self.queue_frame.items:
+                    item.set_state(state, message)
+                self.processed_count += 1
+                self._update_progress_display()
+            elif event_type == "batch_finished":
+                self._on_conversion_finished()
 
     # 스레드 안전 UI 업데이트 루프
     def _update_ui_loop(self):
         """백그라운드 스레드가 기록해둔 slot_data 상태값을 100ms 주기로 실제 UI 위젯에 바인딩"""
+        self._drain_ui_events()
+        if not self._ui_loop_running:
+            return
+
         with self.slot_lock:
             for idx, slot_frame in enumerate(self.slot_frames):
                 data = self.slot_data[idx]
-                if data['active']:
+                if data['active'] or data.get('visible', False):
                     # 축약 파일명 설정
                     name = data['filename']
                     short_name = name if len(name) <= 30 else name[:27] + "..."
@@ -593,9 +768,13 @@ class VideoConverterApp(BaseClass):
                     
                     # 진행률 반영
                     slot_frame.progress.set(data['pct'] / 100.0)
-                    slot_frame.lbl_status.configure(
-                        text=f"{data['pct']:.1f}% ({data['time_str']} / speed: {data['speed']})"
-                    )
+                    result_text = data.get('result_text', '')
+                    if result_text:
+                        slot_frame.lbl_status.configure(text=result_text)
+                    else:
+                        slot_frame.lbl_status.configure(
+                            text=f"{data['pct']:.1f}% ({data['time_str']} / speed: {data['speed']})"
+                        )
                 else:
                     slot_frame.reset()
 
@@ -607,7 +786,10 @@ class VideoConverterApp(BaseClass):
         if self.is_processing:
             return
 
-        items_to_process = [item for item in self.queue_frame.items if item.status_label.cget("text") not in ["완료", "실패"]]
+        items_to_process = [
+            item for item in self.queue_frame.items
+            if should_reprocess(item.state)
+        ]
         if not items_to_process:
             messagebox.showwarning("경고", "대기열에 처리할 대기 상태의 파일이 없습니다.")
             return
@@ -620,6 +802,17 @@ class VideoConverterApp(BaseClass):
         if save_m == "custom" and not out_dir:
             messagebox.showwarning("경고", "저장 폴더 경로를 지정해 주세요.")
             return
+
+        if self.delete_source.get() and save_m == "same":
+            ans = messagebox.askyesno(
+                "원본 파일 삭제 경고",
+                f"변환에 성공한 원본 파일 최대 {len(items_to_process)}개가 영구 삭제됩니다.\n"
+                "출력 파일은 원본과 같은 폴더에 저장됩니다.\n\n"
+                "원본 자동 삭제를 적용해 변환을 시작하시겠습니까?",
+                parent=self,
+            )
+            if not ans:
+                return
 
         # 덮어쓰기 경고창
         if name_o == "overwrite":
@@ -635,7 +828,15 @@ class VideoConverterApp(BaseClass):
         # UI Lock 적용
         self.is_processing = True
         self.cancel_event.clear()
-        self.btn_start.configure(state="disabled", fg_color="#5A5A5A", text="처리 중...")
+        self.close_after_cancel = False
+        self.btn_start.configure(
+            state="normal",
+            command=self._request_cancel,
+            fg_color="#D64545",
+            hover_color="#B93636",
+            text_color="#FFFFFF",
+            text="취소",
+        )
         self.btn_clear.configure(state="disabled")
         self.btn_add_files.configure(state="disabled")
         self.btn_add_folder.configure(state="disabled")
@@ -643,11 +844,18 @@ class VideoConverterApp(BaseClass):
 
         self.processed_count = 0
         self.total_count = len(items_to_process)
+        self.batch_results = {}
+        self.last_result_summary = ""
         self._update_progress_display()
 
         # 전역 슬롯 초기화
-        for idx in range(8):
-            self.slot_data[idx] = {'filename': '대기 중...', 'pct': 0.0, 'time_str': '-', 'speed': '-', 'active': False}
+        with self.slot_lock:
+            for idx in range(8):
+                self.slot_data[idx] = self._empty_slot_data()
+        self.dashboard_panel.grid(
+            row=3, column=0, padx=15, pady=4, sticky="ew"
+        )
+        self._arrange_progress_slots()
 
         # 사용자 설정 딕셔너리 구축
         res_limit = self.resolution_limit.get()
@@ -669,71 +877,102 @@ class VideoConverterApp(BaseClass):
             'nvenc_preset': 'p5'
         }
 
+        jobs = self.parallel_jobs.get()
         # 스레드풀 및 대기열 실행 스레드
         threading.Thread(
             target=self._run_parallel_executor_thread,
-            args=(items_to_process, settings, out_dir, name_o, name_val),
+            args=(items_to_process, settings, out_dir, name_o, name_val, jobs),
             daemon=True
         ).start()
 
-    def _run_parallel_executor_thread(self, items, settings, output_dir, name_option, value):
-        jobs = self.parallel_jobs.get()
-        
+    def _run_parallel_executor_thread(
+        self, items, settings, output_dir, name_option, value, jobs
+    ):
         # ThreadPoolExecutor를 이용해 병렬 인코딩 처리
-        with ThreadPoolExecutor(max_workers=jobs) as executor:
-            futures = []
-            for item in items:
-                futures.append(
-                    executor.submit(
-                        self._encode_task_worker, 
-                        item, 
-                        settings, 
-                        output_dir, 
-                        name_option, 
-                        value
+        try:
+            with ThreadPoolExecutor(max_workers=jobs) as executor:
+                futures = []
+                for item in items:
+                    futures.append(
+                        (
+                            item,
+                            executor.submit(
+                                self._encode_task_worker,
+                                item,
+                                settings,
+                                output_dir,
+                                name_option,
+                                value,
+                                jobs,
+                            ),
+                        )
                     )
-                )
-            
-            # 각 스레드가 끝날 때마다 결과 취합
-            for future in futures:
-                future.result()
 
-        # 모든 스레드 작업 완료
-        self.after(0, self._on_conversion_finished)
+                # 각 스레드가 끝날 때마다 결과 취합
+                for item, future in futures:
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        self.ui_event_queue.put(
+                            (
+                                "item_result",
+                                item,
+                                QueueItemState.FAILED,
+                                f"작업 스레드가 비정상 종료되었습니다: {exc}",
+                            )
+                        )
+        finally:
+            self.ui_event_queue.put(("batch_finished",))
 
-    def _encode_task_worker(self, item, settings, output_dir, name_option, value):
+    def _encode_task_worker(
+        self, item, settings, output_dir, name_option, value, jobs
+    ):
         """개별 비디오 파일을 변환하는 스레드 워커"""
         if self.cancel_event.is_set():
-            item.after(0, lambda: item.update_status("취소됨", "#FF007F"))
+            self.ui_event_queue.put(
+                (
+                    "item_result",
+                    item,
+                    QueueItemState.CANCELLED,
+                    "변환 시작 전에 사용자가 작업을 취소했습니다.",
+                )
+            )
             return
 
         filename = os.path.basename(item.file_path)
-        item.after(0, lambda: item.update_status("변환 중...", "#F77F00"))
+        self.ui_event_queue.put(
+            ("item_state", item, QueueItemState.RUNNING, "")
+        )
 
         # 빈 슬롯 획득
         slot_id = None
-        jobs = self.parallel_jobs.get()
         with self.slot_lock:
             for idx in range(jobs):
                 if not self.slot_data[idx]['active']:
                     slot_id = idx
                     self.slot_data[slot_id] = {
-                        'filename': filename, 'pct': 0.0, 'time_str': '-', 'speed': '-', 'active': True
+                        'filename': filename,
+                        'pct': 0.0,
+                        'time_str': '-',
+                        'speed': '-',
+                        'active': True,
+                        'visible': True,
+                        'result_text': '',
                     }
                     break
-        
-        # 가용한 슬롯이 없으면 0번 슬롯 강제 할당
-        if slot_id is None:
-            slot_id = 0
 
         # 실시간 진행 콜백 함수 정의
         def progress_callback(pct, time_str, speed):
+            if slot_id is None:
+                return
             with self.slot_lock:
                 self.slot_data[slot_id]['pct'] = pct
                 self.slot_data[slot_id]['time_str'] = time_str
                 self.slot_data[slot_id]['speed'] = speed
 
         # 오디오/비디오 변환 프로세스 구동
+        state = QueueItemState.FAILED
+        msg = "알 수 없는 변환 오류가 발생했습니다."
         try:
             status, msg = process_video(
                 item.file_path,
@@ -744,43 +983,109 @@ class VideoConverterApp(BaseClass):
                 progress_callback,
                 self.cancel_event
             )
-            
-            # 대기열 항목 UI 상태 업데이트
-            if status == 'SUCCESS':
-                item.after(0, lambda: item.update_status("완료", "#06D6A0"))
-            elif status == 'SUCCESS_DEL':
-                item.after(0, lambda: item.update_status("완료(삭제)", "#06D6A0"))
-            elif status == 'COPY':
-                item.after(0, lambda: item.update_status("복사완료", "#06D6A0"))
-            else:
-                item.after(0, lambda: item.update_status("실패", "#FF007F"))
+            state = process_status_to_state(status)
+            if not msg:
+                msg = "변환 모듈이 상세 결과 메시지를 제공하지 않았습니다."
         except Exception as e:
-            item.after(0, lambda: item.update_status("에러", "#FF007F"))
+            state = QueueItemState.FAILED
+            msg = f"변환 처리 중 예외가 발생했습니다: {e}"
             print(f"변환 스레드 에러: {e}", file=sys.stderr)
         finally:
-            # 슬롯 반환
-            with self.slot_lock:
-                self.slot_data[slot_id]['active'] = False
+            if slot_id is not None:
+                with self.slot_lock:
+                    slot = self.slot_data[slot_id]
+                    slot['active'] = False
+                    slot['visible'] = True
+                    slot['result_text'] = STATE_PRESENTATION[state][0]
+                    if state in {
+                        QueueItemState.SUCCESS,
+                        QueueItemState.SUCCESS_DEL,
+                        QueueItemState.COPY,
+                    }:
+                        slot['pct'] = 100.0
 
-            # 전체 카운트 갱신
-            self.processed_count += 1
-            self.after(0, self._update_progress_display)
+            self.ui_event_queue.put(("item_result", item, state, msg))
+
+    def _begin_cancel(self, close_after=False):
+        if not self.is_processing:
+            return
+        if close_after:
+            self.close_after_cancel = True
+        if self.cancel_event.is_set():
+            return
+        self.cancel_event.set()
+        self.btn_start.configure(
+            state="disabled",
+            fg_color="#5A5A5A",
+            text="취소 중...",
+        )
+        self.lbl_progress.configure(
+            text=f"취소 요청 중 ({self.processed_count}/{self.total_count})"
+        )
+
+    def _request_cancel(self):
+        if not self.is_processing:
+            return
+        confirmed = messagebox.askyesno(
+            "변환 취소",
+            "현재 실행 중인 변환과 아직 시작하지 않은 대기 작업을 모두 취소하시겠습니까?\n"
+            "처리 중이던 출력 파일은 완전하지 않을 수 있습니다.",
+            parent=self,
+        )
+        if confirmed:
+            self._begin_cancel()
+
+    def _on_close_requested(self):
+        if not self.is_processing:
+            self._ui_loop_running = False
+            self.destroy()
+            return
+
+        confirmed = messagebox.askyesno(
+            "변환 취소 후 종료",
+            "변환이 진행 중입니다.\n"
+            "실행 및 대기 작업을 모두 취소한 뒤 프로그램을 종료하시겠습니까?",
+            parent=self,
+        )
+        if confirmed:
+            self._begin_cancel(close_after=True)
 
     def _on_conversion_finished(self):
         self.is_processing = False
-        self.btn_start.configure(state="normal", fg_color="#06D6A0", text="변환 시작")
+        counts = summarize_item_states(self.batch_results.values())
+        self.last_result_summary = format_result_summary(counts)
+        self.btn_start.configure(
+            state="normal",
+            command=self._start_conversion,
+            fg_color="#06D6A0",
+            hover_color="#05B98A",
+            text_color="#1E1E2E",
+            text="변환 시작",
+        )
         self.btn_clear.configure(state="normal")
         self.btn_add_files.configure(state="normal")
         self.btn_add_folder.configure(state="normal")
         self.slider_jobs.configure(state="normal")
 
         self._update_progress_display()
-        
-        # 슬롯 리셋
-        for idx in range(8):
-            self.slot_data[idx]['active'] = False
-            
-        messagebox.showinfo("완료", "모든 비디오 변환/복사 작업이 완료되었습니다!")
+
+        detail = (
+            f"전체 {self.total_count}개 작업 결과\n\n"
+            f"{self.last_result_summary}\n\n"
+            "실패 또는 취소 항목의 상태를 클릭하면 상세 사유를 확인할 수 있습니다."
+        )
+        has_problem = (
+            counts[QueueItemState.FAILED] > 0
+            or counts[QueueItemState.CANCELLED] > 0
+        )
+        if has_problem:
+            messagebox.showwarning("작업 결과 확인", detail, parent=self)
+        else:
+            messagebox.showinfo("작업 완료", detail, parent=self)
+
+        if self.close_after_cancel:
+            self._ui_loop_running = False
+            self.destroy()
 
     def _show_help_popup(self):
         """세련된 도움말/팁 안내 팝업창(Toplevel) 호출"""
@@ -855,4 +1160,3 @@ class VideoConverterApp(BaseClass):
 if __name__ == "__main__":
     app = VideoConverterApp()
     app.mainloop()
-
