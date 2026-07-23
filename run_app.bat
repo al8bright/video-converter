@@ -24,9 +24,15 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+pip install -e . --no-deps
+if errorlevel 1 (
+    echo [ERROR] Local package installation failed.
+    pause
+    exit /b 1
+)
 
 echo [3/3] Launching CUDA/NVENC Video Converter...
-python gui_app.py
+python -m videoconverter
 if errorlevel 1 (
     echo [ERROR] Program terminated unexpectedly.
     pause

@@ -1,6 +1,6 @@
-"""core_converter.py 의 순수 로직 함수 단위 테스트.
+"""videoconverter.core 의 순수 로직 함수 단위 테스트.
 
-gui_app.py 가 line 13에서 임포트해 실제로 사용하는 핵심 로직
+gui.app이 공개 API로 임포트해 사용하는 핵심 로직
 (파일 경로 생성 = resolve_output_path, 명령 생성 = _build_ffmpeg_cmd 등)을 대상으로 한다.
 subprocess / ffmpeg / ctypes / GUI 이벤트 루프가 필요한 함수는 제외했다.
 """
@@ -9,7 +9,8 @@ import threading
 
 import pytest
 
-import core_converter as cc
+import videoconverter.core as cc
+from videoconverter.core import pipeline
 
 
 # ---------------------------------------------------------------------------
@@ -368,8 +369,8 @@ BASE_PV_SETTINGS = {
 
 class TestProcessVideoStaging:
     def _patch(self, monkeypatch, info, run_impl):
-        monkeypatch.setattr(cc, "get_video_info", lambda p: dict(info))
-        monkeypatch.setattr(cc, "run_ffmpeg_and_track", run_impl)
+        monkeypatch.setattr(pipeline, "get_video_info", lambda p: dict(info))
+        monkeypatch.setattr(pipeline, "run_ffmpeg_and_track", run_impl)
 
     def test_success_uses_tmp_then_atomic_replace(self, monkeypatch, tmp_path):
         src = tmp_path / "movie.mkv"

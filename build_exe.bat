@@ -6,14 +6,12 @@ echo.
 
 :: 기존 빌드 결과물 삭제하여 충돌 방지
 echo [1/3] Cleaning previous build files...
-rmdir /s /q build
-rmdir /s /q dist
-del /q VideoConverter.spec
+if exist build rmdir /s /q build
+if exist dist rmdir /s /q dist
 
-echo [2/3] Packing single EXE file...
+echo [2/3] Packing single EXE file from VideoConverter.spec...
 call .venv\Scripts\activate.bat
-pyinstaller --noconfirm --onefile --windowed --name="VideoConverter" --icon="video_icon.ico" --add-data ".venv\Lib\site-packages\customtkinter;customtkinter" --collect-all tkinterdnd2 gui_app.py
-
+pyinstaller --noconfirm VideoConverter.spec
 
 if errorlevel 1 (
     echo.

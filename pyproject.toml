@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "videoconverter"
+version = "1.0.0"
+description = "Windows NVIDIA NVENC batch video converter"
+requires-python = ">=3.10"
+dependencies = [
+    "customtkinter",
+    "tkinterdnd2",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+videoconverter = ["assets/*"]
+
