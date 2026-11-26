@@ -120,7 +120,8 @@ def process_video(
         def build(use_faststart):
             if is_remux:
                 return _build_ffmpeg_cmd(
-                    src_path, tmp_path, True, "", use_faststart, "cpu", settings
+                    src_path, tmp_path, True, "", use_faststart, "cpu", settings,
+                    text_sub_indices,
                 )
             return _build_ffmpeg_cmd(
                 src_path,

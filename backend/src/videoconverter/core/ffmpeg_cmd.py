@@ -139,8 +139,18 @@ def _build_ffmpeg_cmd(
     """변환 모드와 사용자 설정에 따라 ffmpeg 인자를 구성한다."""
     add_faststart = bool(faststart) and _output_wants_faststart(output_path)
 
+    # 담을 스트림을 명시한다. 기본 선택에 맡기면 오디오는 한 트랙만, 자막은 mp4가 못 담는 형식이면
+    # 조용히 빠진다. 비디오 첫 트랙 + 오디오 전부 + (mp4면) 텍스트 자막을 mov_text로.
+    maps = ["-map", "0:v:0", "-map", "0:a?"]
+    sub_codec_args = []
+    if text_sub_indices and _output_wants_faststart(output_path):
+        for index in text_sub_indices:
+            maps += ["-map", f"0:s:{index}?"]
+        sub_codec_args = ["-c:s", "mov_text"]
+
     if remux_only:
-        cmd = [tools.ffmpeg(), "-y", "-i", input_path, "-c", "copy"]
+        # 자막은 mov_text로 옮겨야 하므로 -c copy 뒤에 -c:s 로 덮어쓴다(텍스트 변환은 순식간이다)
+        cmd = [tools.ffmpeg(), "-y", "-i", input_path, *maps, "-c", "copy", *sub_codec_args]
         if add_faststart:
             cmd += ["-movflags", "+faststart"]
         cmd += [output_path]
@@ -157,14 +167,7 @@ def _build_ffmpeg_cmd(
     cmd = [tools.ffmpeg(), "-y"]
     if mode == "cuda":
         cmd += ["-hwaccel", "cuda"]
-    cmd += ["-i", input_path]
-    cmd += ["-map", "0:v:0", "-map", "0:a?"]
-
-    sub_codec_args = []
-    if text_sub_indices and _output_wants_faststart(output_path):
-        for index in text_sub_indices:
-            cmd += ["-map", f"0:s:{index}?"]
-        sub_codec_args = ["-c:s", "mov_text"]
+    cmd += ["-i", input_path, *maps]
 
     if mode == "cpu":
         cmd += ["-c:v", "libx264", "-preset", "medium"]

@@ -351,6 +351,35 @@ class TestStreamMapping:
             mode="cpu", settings=BASE_SETTINGS,
         )
         assert "-c" in cmd and "copy" in cmd
+        # 기본 선택은 오디오를 한 트랙만 고른다
+        assert "0:v:0" in cmd and "0:a?" in cmd
+
+    def test_remux_moves_text_subs_as_mov_text(self):
+        """복사할 때 ASS 같은 텍스트 자막이 조용히 빠지던 문제."""
+        cmd = cc._build_ffmpeg_cmd(
+            "in.mkv", "out.mp4", remux_only=True, vf="", faststart=False,
+            mode="cpu", settings=BASE_SETTINGS, text_sub_indices=[1],
+        )
+        assert "0:s:1?" in cmd
+        assert cmd.index("mov_text") > cmd.index("copy"), "-c copy 뒤에 와야 자막 코덱이 이긴다"
+        assert cmd[-1] == "out.mp4"
+
+    def test_pipeline_passes_text_subs_to_remux(self, monkeypatch, tmp_path):
+        src = tmp_path / "movie.mkv"
+        src.write_bytes(b"orig" * 100)
+        seen = []
+
+        def fake_run(cmd, total, cb, ev, output_path=None):
+            seen.append(cmd)
+            with open(output_path or cmd[-1], "wb") as f:
+                f.write(b"x" * 5000)
+            return 0, ""
+
+        monkeypatch.setattr(pipeline, "get_video_info", lambda p: dict(REMUX_INFO, sub_codecs=["hdmv_pgs_subtitle", "ass"]))
+        monkeypatch.setattr(pipeline, "run_ffmpeg_and_track", fake_run)
+        status, _msg = cc.process_video(str(src), str(tmp_path), "suffix", "_c", dict(BASE_PV_SETTINGS))
+        assert status == "COPY"
+        assert "0:s:1?" in seen[0] and "0:s:0?" not in seen[0], "그림 자막(PGS)은 mp4에 못 담아 빼고 텍스트만"
 
 
 # ---------------------------------------------------------------------------
