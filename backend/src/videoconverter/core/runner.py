@@ -16,7 +16,6 @@ from ..config import STUCK_TIMEOUT_SEC
 from .ffmpeg_cmd import _safe_remove
 from .probe import SUBPROC_TEXT, _time_str_to_seconds
 
-
 # ---------------------------------------------------------------------------
 # 실행 중 ffmpeg 프로세스 레지스트리 (GUI 강제 종료용)
 # ---------------------------------------------------------------------------

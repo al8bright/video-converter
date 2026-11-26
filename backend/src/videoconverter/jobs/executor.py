@@ -9,7 +9,7 @@ from .. import theme
 from ..core import process_video
 
 
-class QueueItemState(str, Enum):
+class QueueItemState(str, Enum):  # noqa: UP042 - 옛 화면이 str() 결과에 기대므로 StrEnum으로 바꾸지 않는다(executor는 Phase 2에서 다시 씀)
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"

@@ -1,3 +1,0 @@
-customtkinter
-pyinstaller
-tkinterdnd2

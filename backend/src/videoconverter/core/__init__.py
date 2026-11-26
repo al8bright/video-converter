@@ -4,8 +4,8 @@ from .errorlog import log_conversion_error
 from .ffmpeg_cmd import (
     _build_ffmpeg_cmd,
     _force_mp4_ext,
-    _stderr_suggests_fatal_input_error,
     _stderr_suggests_faststart_failure,
+    _stderr_suggests_fatal_input_error,
     _stderr_suggests_nvenc_fail,
     _summarize_ffmpeg_stderr,
     resolve_output_path,

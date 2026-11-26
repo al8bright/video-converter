@@ -3,7 +3,6 @@
 import subprocess
 import sys
 
-
 SUBPROC_TEXT = {"encoding": "utf-8", "errors": "replace"}
 
 
@@ -30,8 +29,7 @@ def get_video_info(file_path):
         ]
         result = subprocess.run(
             cmd_res,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=True,
             creationflags=creation_flags,
@@ -49,8 +47,7 @@ def get_video_info(file_path):
         ]
         result = subprocess.run(
             cmd_dur,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=True,
             creationflags=creation_flags,
@@ -66,8 +63,7 @@ def get_video_info(file_path):
         ]
         result = subprocess.run(
             cmd_br,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=True,
             creationflags=creation_flags,
@@ -83,8 +79,7 @@ def get_video_info(file_path):
             ]
             result = subprocess.run(
                 cmd_br_fmt,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=True,
                 creationflags=creation_flags,
@@ -101,8 +96,7 @@ def get_video_info(file_path):
             ]
             res_sub = subprocess.run(
                 cmd_sub,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=False,
                 creationflags=creation_flags,

@@ -6,7 +6,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from .. import theme
-from ..jobs.executor import QueueItemState, STATE_PRESENTATION
+from ..jobs.executor import STATE_PRESENTATION, QueueItemState
 
 
 class QueueItemFrame(ctk.CTkFrame):

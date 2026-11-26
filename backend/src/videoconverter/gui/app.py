@@ -18,6 +18,7 @@ from ..config import (
     build_settings,
 )
 from ..core import get_video_info
+
 try:
     from videoconverter.core import terminate_all_processes
 except ImportError:
@@ -40,7 +41,6 @@ from ..resources import resource_path
 from .dnd import DND_FILES, HAS_DND, build_base_class, parse_dropped_files
 from .help_text import PERFORMANCE_HELP, SETTINGS_HELP
 from .widgets import ProgressSlotFrame, ScrollableQueueFrame
-
 
 BaseClass = build_base_class()
 
@@ -75,7 +75,7 @@ class VideoConverterApp(BaseClass):
         # 하드웨어 정보 탐지 및 권장 작업수 세팅
         self.gpu_name, self.vram_mb = get_nvidia_gpu_info()
         self.sys_ram_gb = get_system_ram_gb()
-        
+
         rec_jobs = recommend_parallel_jobs(self.gpu_name, self.vram_mb)
         self.parallel_jobs = ctk.IntVar(value=rec_jobs)
         self.video_bitrate = ctk.StringVar(
@@ -160,9 +160,9 @@ class VideoConverterApp(BaseClass):
             gpu_desc = f"{self.gpu_name} ({self.vram_mb/1024:.1f}GB VRAM)"
         else:
             gpu_desc = "NVIDIA GPU 미감지 (CPU/S/W 모드 작동)"
-            
+
         sys_ram_desc = f"{self.sys_ram_gb} GB" if self.sys_ram_gb > 0 else "감지 불가"
-        
+
         info_text = f"🖥️ 시스템 사양 감지  |  NVIDIA GPU: [{gpu_desc}]  |  시스템 RAM: [{sys_ram_desc}]"
         lbl_sys_info = ctk.CTkLabel(
             sys_info_bar, text=info_text, font=theme.font(11, "bold"), text_color=theme.COLOR_TEXT_MUTED
@@ -178,15 +178,15 @@ class VideoConverterApp(BaseClass):
         # 2.1 동시 작업수 슬라이더
         lbl_jobs = ctk.CTkLabel(self.settings_panel, text="동시 변환 작업 수:", font=theme.font(11, "bold"))
         lbl_jobs.grid(row=0, column=0, padx=15, pady=5, sticky="w")
-        
+
         slider_frame = ctk.CTkFrame(self.settings_panel, fg_color="transparent")
         slider_frame.grid(row=0, column=1, padx=15, pady=5, sticky="ew")
-        
+
         self.slider_jobs = ctk.CTkSlider(
             slider_frame, from_=1, to=8, number_of_steps=7, variable=self.parallel_jobs, command=self._on_jobs_slider_changed, height=16
         )
         self.slider_jobs.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        
+
         self.lbl_jobs_val = ctk.CTkLabel(slider_frame, text=f"{self.parallel_jobs.get()}개", font=theme.font(11, "bold"), width=30)
         self.lbl_jobs_val.pack(side="right")
 
@@ -293,13 +293,13 @@ class VideoConverterApp(BaseClass):
 
         lbl_dash = ctk.CTkLabel(self.dashboard_panel, text="현재 실행 중인 변환 작업", font=theme.font(12, "bold"), text_color=theme.COLOR_TEXT_MUTED)
         lbl_dash.pack(anchor="w", padx=15, pady=(8, 4))
-        
+
         # 8개의 진행바 슬롯 생성
         self.slot_frames = []
-        for i in range(MAX_SLOTS):
+        for _i in range(MAX_SLOTS):
             slot = ProgressSlotFrame(self.dashboard_panel)
             self.slot_frames.append(slot)
-            
+
         # 초기 작업 수 기준 슬롯 프레임 노출
         self._arrange_progress_slots()
 
@@ -352,11 +352,11 @@ class VideoConverterApp(BaseClass):
     def _arrange_progress_slots(self):
         """설정된 동시 변환 개수(PARALLEL_JOBS)에 맞게 진행바 슬롯 위젯을 노출/배치"""
         jobs = self.parallel_jobs.get()
-        
+
         # 전체 언팩 후 지정된 개수만 팩
         for slot in self.slot_frames:
             slot.pack_forget()
-            
+
         for i in range(jobs):
             self.slot_frames[i].pack(fill="x", padx=10, pady=4)
 
@@ -533,7 +533,7 @@ class VideoConverterApp(BaseClass):
                     name = data['filename']
                     short_name = name if len(name) <= 30 else name[:27] + "..."
                     slot_frame.lbl_filename.configure(text=short_name, text_color=theme.COLOR_TEXT)
-                    
+
                     # 진행률 반영
                     slot_frame.progress.set(data['pct'] / 100.0)
                     result_text = data.get('result_text', '')
@@ -755,7 +755,7 @@ class VideoConverterApp(BaseClass):
         popup.title("NVIDIA Video Converter 설정 가이드 & 팁")
         popup.geometry("600x480")
         popup.resizable(False, False)
-        
+
         # 메인 윈도우 위에 항상 표시되도록 모달화
         popup.transient(self)
         popup.grab_set()

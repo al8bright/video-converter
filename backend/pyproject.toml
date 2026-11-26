@@ -1,0 +1,42 @@
+[project]
+name = "videoconverter"
+version = "1.0.0"
+description = "Windows NVIDIA NVENC batch video converter backend (FFmpeg)"
+authors = [
+    { name = "al8bright" }
+]
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    # 옛 화면(CustomTkinter). 새 화면(React)이 들어오면 지운다(PLAN.md Phase 6)
+    "customtkinter>=5.2",
+    "tkinterdnd2>=0.4",
+]
+
+[project.scripts]
+videoconverter = "videoconverter.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B905"]
+
+[tool.uv]
+environments = ["sys_platform == 'win32'"]
