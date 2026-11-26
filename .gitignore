@@ -6,3 +6,13 @@ dist/
 .vscode/
 *.pyc
 *.egg-info/
+
+# local tooling and notes (not part of the app)
+.agents/
+.claude/
+.mcp.json
+skills-lock.json
+.analysis/
+# the original one-off CLI script: holds private folder paths
+convert_video_win.py
+.pytest_cache/
