@@ -424,6 +424,46 @@ class TestProcessVideoStaging:
         # 임시파일은 남지 않아야 함
         assert not any(p.name.startswith("movie_c.mp4.part-") for p in tmp_path.iterdir())
 
+    def test_tmp_is_recorded_while_converting(self, monkeypatch, tmp_path):
+        # 만드는 동안은 임시 파일 경로가 기록에 있고(강제 종료 대비), 끝나면 빠진다.
+        from videoconverter.core import leftovers
+
+        src = tmp_path / "movie.mkv"
+        src.write_bytes(b"original-source-bytes" * 100)
+        during = {}
+
+        def fake_run(cmd, total, cb, ev, output_path=None):
+            during["paths"] = leftovers._read()
+            during["out"] = output_path
+            with open(output_path, "wb") as f:
+                f.write(b"x" * 5000)
+            return 0, ""
+
+        self._patch(monkeypatch, ENCODE_INFO, fake_run)
+        status, _ = cc.process_video(str(src), str(tmp_path), "suffix", "_c", dict(BASE_PV_SETTINGS))
+        assert status == "SUCCESS"
+        assert during["paths"] == [during["out"]]
+        assert leftovers._read() == []
+
+    def test_tmp_that_could_not_be_removed_stays_recorded(self, monkeypatch, tmp_path):
+        # 실패 뒤에도 임시 파일이 지워지지 않았으면 다음 시작 때 지우도록 기록에 남긴다.
+        from videoconverter.core import leftovers
+
+        src = tmp_path / "movie.mkv"
+        src.write_bytes(b"original-source-bytes" * 100)
+
+        def fake_run(cmd, total, cb, ev, output_path=None):
+            with open(output_path, "wb") as f:
+                f.write(b"x")
+            return 1, "Conversion failed!"
+
+        self._patch(monkeypatch, ENCODE_INFO, fake_run)
+        monkeypatch.setattr(pipeline, "_safe_remove", lambda *a, **k: None)
+        status, _ = cc.process_video(str(src), str(tmp_path), "suffix", "_c", dict(BASE_PV_SETTINGS))
+        assert status == "FAIL"
+        left = leftovers._read()
+        assert len(left) == 1 and ".part-" in left[0] and os.path.exists(left[0])
+
     def test_same_file_overwrite_is_safe(self, monkeypatch, tmp_path):
         # 덮어쓰기 + 동일폴더 mp4 → dest == src. 임시 스테이징으로 안전 교체(C-1).
         src = tmp_path / "clip.mp4"

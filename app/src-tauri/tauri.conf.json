@@ -1,0 +1,62 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "VideoConverter",
+  "version": "1.0.0",
+  "identifier": "dev.al8bright.videoconverter",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5175",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Video Converter",
+        "width": 1120,
+        "height": 840,
+        "minWidth": 920,
+        "minHeight": 640,
+        "resizable": true,
+        "backgroundColor": "#07050F",
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../../backend/dist/videoconverter-backend/": "backend/"
+    },
+    "publisher": "al8bright",
+    "copyright": "Copyright (c) 2026 al8bright. MIT License.",
+    "license": "MIT",
+    "shortDescription": "NVIDIA NVENC로 영상을 H.264 mp4로 일괄 변환",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Korean",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  }
+}

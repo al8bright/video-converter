@@ -64,6 +64,27 @@ export default function App() {
     seenNotice.current = Math.max(seenNotice.current, last);
   }, [data, alert]);
 
+  // 창 어디에 끌어다 놓아도 대기열에 담는다. 폴더는 백엔드가 하위 폴더까지 찾는다
+  useEffect(() => {
+    if (!inTauri) return;
+    let unlisten: (() => void) | undefined;
+    let gone = false;
+    import("@tauri-apps/api/webview").then(({ getCurrentWebview }) =>
+      getCurrentWebview()
+        .onDragDropEvent((e) => {
+          if (e.payload.type !== "drop" || !e.payload.paths.length) return;
+          const paths = e.payload.paths;
+          setScreen("queue");
+          void act(() => api.post("/queue/paths", { paths }));
+        })
+        .then((u) => (gone ? u() : (unlisten = u))),
+    );
+    return () => {
+      gone = true;
+      unlisten?.();
+    };
+  }, [act]);
+
   // 변환 중에 창을 닫으면 확인을 받는다
   useEffect(() => {
     if (!inTauri) return;

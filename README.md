@@ -61,6 +61,13 @@ pnpm dev                         :: http://localhost:5175
 
 브라우저에서는 끌어다 놓기와 선택 창이 없어 '경로로 추가'로 파일이나 폴더 경로를 넣습니다. 화면 규칙은 [DESIGN.md](DESIGN.md)에 있습니다.
 
+데스크톱 창으로 띄우려면(Rust 필요, 백엔드는 셸이 `uv run`으로 직접 띄움):
+
+```bat
+cd app
+pnpm tauri dev
+```
+
 처음 실행할 때 uv가 Python과 의존성을 설치합니다. 테스트와 린트:
 
 ```bat
@@ -124,6 +131,7 @@ ffprobe -version
 | `backend/src/videoconverter/jobs/` | 병렬 작업 실행과 슬롯 상태 관리 |
 | `backend/src/videoconverter/assets/` | 창·실행 파일 아이콘 |
 | `app/src/` | 새 화면(React): 대기열 · 설정 · 도움말. `backend.ts`·`common.tsx`·`base.css`는 네 앱 공통 |
+| `app/src-tauri/` | 데스크톱 셸(Tauri): 백엔드를 띄우고 끝냄. `lib.rs`는 네 앱 공통, 앱 값은 `app_info.rs` |
 | `scripts/check_structure.py` | 네 앱 공통 파일이 같은지 확인 |
 | `backend/tests/` | pytest |
 | `backend/pyproject.toml`, `uv.lock` | 의존성과 ruff·pytest 설정 |

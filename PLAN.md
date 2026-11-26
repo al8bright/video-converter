@@ -131,10 +131,16 @@ CUDA를 숨긴 실행에서 NVENC 실패 → CPU(libx264) 폴백.
 
 ### Phase 4 — Tauri 셸
 
-- [ ] 공통 `lib.rs`, 끌어다 놓기, 폴더 선택 창, 닫기 확인
-- [ ] 아이콘(`assets/video_icon.png`에서 다시 만듦)
+- [x] 공통 `lib.rs`, 끌어다 놓기, 폴더 선택 창, 닫기 확인
+- [x] 아이콘(`assets/video_icon.png`에서 다시 만듦)
+- [x] 만들다 만 임시 출력은 `<앱 데이터>/partials.json`에 적어 두고 다음 시작 때 지움(`core/leftovers.py`).
+  이름의 pid가 아직 살아 있으면(다른 실행) 남겨 둡니다.
 
 완료 기준: `pnpm tauri dev`로 앱이 뜨고, 변환 중 강제 종료 뒤 FFmpeg가 남지 않습니다.
+
+확인(2026-11-26, `pnpm tauri dev`): 창에서 5분 영상을 넣어 변환하던 중 `taskkill /F`로 앱만 끝냄 →
+ffmpeg 2개(shim과 진짜)와 백엔드가 함께 끝남. 남은 `.part-` 파일은 다음 시작 때 지워짐.
+끌어다 놓기와 파일·폴더 선택 창은 진짜 마우스·OS 창이 필요해 자동으로는 확인하지 못했습니다(코드는 jamak과 같은 방식).
 
 ### Phase 5 — 설치 파일, CI, 문서
 

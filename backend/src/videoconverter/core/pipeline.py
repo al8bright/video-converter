@@ -7,6 +7,7 @@ from ..config import (
     REMUX_THRESHOLD_MBPS,
     TEXT_SUB_CODECS,
 )
+from . import leftovers
 from .errorlog import log_conversion_error
 from .ffmpeg_cmd import (
     _build_ffmpeg_cmd,
@@ -181,6 +182,8 @@ def process_video(
 
     _STUCK_MSG = "진행 없음으로 강제 종료 (STUCK_TIMEOUT_SEC 초과)"
 
+    # 앱이 강제로 끝나 지우지 못하면 다음 시작 때 지운다(core/leftovers.py)
+    leftovers.remember(tmp_path)
     try:
         # ---- Remux 경로 ----
         if remux_only:
@@ -247,3 +250,6 @@ def process_video(
         _safe_remove(tmp_path)
         log_conversion_error(display_name, -1, str(exc))
         return "FAIL", f"변환 예외: {exc}"
+    finally:
+        if not os.path.exists(tmp_path):
+            leftovers.forget(tmp_path)

@@ -24,7 +24,7 @@ from videoconverter.config import (
     Sidebar,
     VideoRate,
 )
-from videoconverter.core import tools
+from videoconverter.core import leftovers, tools
 from videoconverter.core.proc import open_with_shell
 from videoconverter.core.service import Service, ServiceError
 
@@ -62,6 +62,7 @@ def create_app(service: Service | None = None, token: str | None = None) -> Fast
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        leftovers.clean()  # 지난번에 강제로 끝나 남은 임시 결과 파일
         yield
         svc.shutdown()
 
