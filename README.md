@@ -27,34 +27,30 @@ NVIDIA GPU의 하드웨어 가속(**CUDA 디코딩** + **h264_nvenc 인코딩**)
 ## 📋 요구사항
 
 - **OS**: Windows 10/11 (RAM 감지에 Windows API `GlobalMemoryStatusEx`, `nvidia-smi` 사용)
-- **Python**: 3.9 이상 권장
+- **[uv](https://docs.astral.sh/uv/)**: Python과 의존성을 맞춰 설치합니다(Python 3.13).
 - **FFmpeg / ffprobe**: `ffmpeg`와 `ffprobe`가 시스템 `PATH`에 등록되어 있어야 합니다. NVENC 가속을 쓰려면 **NVENC가 활성화된 FFmpeg 빌드**가 필요합니다 (예: [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) full 빌드).
 - **NVIDIA GPU + 드라이버**: `h264_nvenc` / CUDA 하드웨어 가속을 위해 NVENC를 지원하는 GeForce/Quadro/RTX GPU와 최신 NVIDIA 드라이버(포함된 `nvidia-smi`). GPU가 없거나 감지되지 않으면 자동으로 CPU(libx264) 모드로 동작합니다.
-- **Python 패키지** (`requirements.txt`):
+- **Python 패키지** (`backend/pyproject.toml`, `uv.lock`으로 고정):
   - `customtkinter` — GUI 프레임워크
   - `tkinterdnd2` — 드래그 앤 드롭 (없어도 파일/폴더 추가 버튼으로 동작)
-  - `pyinstaller` — 단일 실행 파일(.exe) 빌드용
 
 ---
 
 ## 🚀 설치 및 실행
 
-### 방법 1. 배치 스크립트 (권장)
-
-`run_app.bat`을 실행하면 가상환경 생성 → 의존성 설치 → 앱 실행까지 자동으로 처리됩니다.
+> 2.0 전환 중입니다([PLAN.md](PLAN.md)). 지금은 옛 화면(CustomTkinter)이 뜹니다.
 
 ```bat
-run_app.bat
+cd backend
+uv run videoconverter
 ```
 
-### 방법 2. 수동 실행
+처음 실행할 때 uv가 Python과 의존성을 설치합니다. 테스트와 린트:
 
 ```bat
-python -m venv .venv
-.venv\Scripts\activate.bat
-pip install -r requirements.txt
-pip install -e . --no-deps
-python -m videoconverter
+cd backend
+uv run pytest
+uv run ruff check
 ```
 
 ### FFmpeg 확인
@@ -103,26 +99,17 @@ ffprobe -version
 
 | 경로 | 역할 |
 | --- | --- |
-| `src/videoconverter/config.py`, `theme.py` | 변환 설정과 UI 팔레트 상수 |
-| `src/videoconverter/core/` | FFprobe, FFmpeg 명령, 실행 추적, 변환 파이프라인 |
-| `src/videoconverter/gui/` | CustomTkinter 앱, 위젯, DnD, 도움말 |
-| `src/videoconverter/jobs/` | 병렬 작업 실행과 슬롯 상태 관리 |
-| `src/videoconverter/assets/` | 창·실행 파일 아이콘 |
-| `run.py`, `src/videoconverter/__main__.py` | PyInstaller 및 `python -m videoconverter` 진입점 |
-| `requirements.txt` | Python 의존성 목록 |
-| `run_app.bat` | 가상환경 구성 + 실행 런처 |
-| `build_exe.bat` | PyInstaller 단일 실행 파일 빌드 스크립트 |
+| `backend/src/videoconverter/config.py`, `theme.py` | 변환 설정과 UI 팔레트 상수 |
+| `backend/src/videoconverter/core/` | FFprobe, FFmpeg 명령, 실행 추적, 변환 파이프라인 |
+| `backend/src/videoconverter/gui/` | CustomTkinter 앱, 위젯, DnD, 도움말 (2.0에서 React로 바뀜) |
+| `backend/src/videoconverter/jobs/` | 병렬 작업 실행과 슬롯 상태 관리 |
+| `backend/src/videoconverter/assets/` | 창·실행 파일 아이콘 |
+| `backend/src/videoconverter/__main__.py` | `uv run videoconverter`, `python -m videoconverter` 진입점 |
+| `backend/tests/` | pytest |
+| `backend/pyproject.toml`, `uv.lock` | 의존성과 ruff·pytest 설정 |
 
 ---
 
-## 📦 실행 파일(.exe) 빌드
+## 📦 설치 파일
 
-`build_exe.bat`을 실행하면 PyInstaller로 단일 실행 파일을 생성합니다.
-
-```bat
-build_exe.bat
-```
-
-빌드 결과물: `dist/VideoConverter.exe`
-
-> 배포된 `.exe`도 실행 환경에 **FFmpeg/ffprobe(PATH 등록)** 및 NVIDIA 드라이버가 필요합니다.
+2.0에서 Tauri 설치 파일(FFmpeg 포함)로 바뀝니다([PLAN.md](PLAN.md) Phase 5). 옛 단일 실행 파일 빌드(`build_exe.bat`)는 지웠습니다.

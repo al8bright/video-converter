@@ -91,11 +91,11 @@ Tauri 창 (React) ──HTTP / WebSocket (127.0.0.1, 실행마다 바뀌는 토�
 
 ### Phase 1 — 백엔드 폴더로 옮기기 (동작 그대로)
 
-- [ ] `src/videoconverter` → `backend/src/videoconverter`, `tests` → `backend/tests`
-- [ ] `pyproject.toml`을 uv 기준으로(의존성 고정, ruff 설정), `requirements.txt`·`run_app.bat` 정리
-- [ ] ruff 통과, 변환 로직 테스트 통과
+- [x] `src/videoconverter` → `backend/src/videoconverter`, `tests` → `backend/tests`
+- [x] `pyproject.toml`을 uv 기준으로(의존성 고정, ruff 설정), `requirements.txt`·`run_app.bat` 정리. 경로가 바뀌어 동작하지 않게 된 옛 실행 파일 빌드(`run.py`, `VideoConverter.spec`, `build_exe.bat`)도 이때 지움
+- [x] ruff 통과, 변환 로직 테스트 통과 (144개)
 
-완료 기준: `cd backend; uv run pytest`가 통과하고, 옛 화면이 `uv run python -m videoconverter`로 그대로 뜹니다.
+완료 기준: `cd backend; uv run pytest`가 통과하고, 옛 화면이 `uv run videoconverter`로 그대로 뜹니다.
 
 ### Phase 2 — Service와 API
 
@@ -133,7 +133,7 @@ Tauri 창 (React) ──HTTP / WebSocket (127.0.0.1, 실행마다 바뀌는 토�
 
 ### Phase 6 — 옛 화면 제거, 2.0.0
 
-- [ ] `gui/`, `theme.py`, `resources.py`, `run.py`, `VideoConverter.spec`, `build_exe.bat`, `run_app.bat` 삭제
+- [ ] `gui/`, `theme.py`, `resources.py` 삭제 (`run.py`·`VideoConverter.spec`·`build_exe.bat`·`run_app.bat`은 Phase 1에서 지움)
 - [ ] 버전 2.0.0
 
 ---

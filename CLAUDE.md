@@ -10,5 +10,6 @@
 ## 프로젝트 개요
 
 - `video_converter`: Windows용 NVIDIA NVENC 기반 비디오 일괄 변환 GUI 데스크톱 앱.
-- 핵심 파일: `gui_app.py`(GUI), `core_converter.py`(ffmpeg 변환 파이프라인), `tests/`(pytest).
-- 테스트 실행: `.venv/Scripts/python.exe -m pytest -q`
+- 2.0 전환 중: 계획은 `PLAN.md`, 네 앱(jamak_converter 등) 공통 구조는 jamak_converter의 `docs/STRUCTURE.md`.
+- 코드: `backend/src/videoconverter/` — `core/`(ffprobe·ffmpeg 명령·실행·변환 파이프라인), `jobs/`(병렬 실행), `gui/`(옛 CustomTkinter 화면).
+- 테스트·린트: `cd backend; uv run pytest; uv run ruff check`
