@@ -2,10 +2,8 @@
 # ffmpeg.exe·ffprobe.exe 는 여기서 넣지 않는다. scripts/build_app.ps1 이 결과 폴더(dist/videoconverter-backend/)에 복사한다.
 from PyInstaller.utils.hooks import collect_submodules
 
-# 옛 CustomTkinter 화면(gui, theme, resources)은 새 앱에 들어가지 않는다(PLAN.md Phase 6에서 삭제)
-OLD_GUI = ("videoconverter.gui", "videoconverter.theme", "videoconverter.resources")
 hidden = (
-    collect_submodules("videoconverter", filter=lambda name: not name.startswith(OLD_GUI))
+    collect_submodules("videoconverter")
     + collect_submodules("uvicorn")
     + ["websockets", "websockets.legacy", "httptools", "h11"]
 )
@@ -16,8 +14,7 @@ a = Analysis(
     binaries=[],
     datas=[],
     hiddenimports=hidden,
-    excludes=["tkinter", "customtkinter", "tkinterdnd2", "darkdetect", "matplotlib", "IPython", "pytest", "ruff",
-              "PyInstaller", *OLD_GUI],
+    excludes=["tkinter", "matplotlib", "IPython", "pytest", "ruff", "PyInstaller"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

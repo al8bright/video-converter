@@ -8,7 +8,7 @@ import { QueueScreen } from "./Queue";
 import { SettingsScreen } from "./Settings";
 import { Bar, Ellipsis, Icon, Logo, Modal } from "./ui";
 
-const VERSION = "1.0.0";
+const VERSION = "2.0.0";
 
 export default function App() {
   const [ready, setReady] = useState<"wait" | "ok" | string>("wait");

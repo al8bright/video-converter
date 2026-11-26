@@ -76,28 +76,6 @@ wheels = [
 ]
 
 [[package]]
-name = "customtkinter"
-version = "6.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "darkdetect" },
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/36/aee6ed9171a5a232da66a8b257752bd03d25b487c9d67ba367ad159bd976/customtkinter-6.0.0.tar.gz", hash = "sha256:c782df167bc64ab3fc3140286df06967ac2de4dcc97dd5958426fe9c1a98057b", size = 267195, upload-time = "2026-06-24T20:14:32.144Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b0/63/e2d3387432c5a94dec64031c86b5ba737216de7e7490abb55efd64dec054/customtkinter-6.0.0-py3-none-any.whl", hash = "sha256:704fcbf1d2fca06bd7881b0afacfae72aed9864c9b6de2870e632e55eb3a0456", size = 302166, upload-time = "2026-06-24T20:14:30.191Z" },
-]
-
-[[package]]
-name = "darkdetect"
-version = "0.8.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/45/77/7575be73bf12dee231d0c6e60ce7fb7a7be4fcd58823374fc59a6e48262e/darkdetect-0.8.0.tar.gz", hash = "sha256:b5428e1170263eb5dea44c25dc3895edd75e6f52300986353cd63533fe7df8b1", size = 7681, upload-time = "2022-12-16T14:14:42.113Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/f2/728f041460f1b9739b85ee23b45fa5a505962ea11fd85bdbe2a02b021373/darkdetect-0.8.0-py3-none-any.whl", hash = "sha256:a7509ccf517eaad92b31c214f593dbcf138ea8a43b2935406bbd565e15527a85", size = 8955, upload-time = "2022-12-16T14:14:40.92Z" },
-]
-
-[[package]]
 name = "fastapi"
 version = "0.165.0"
 source = { registry = "https://pypi.org/simple" }
@@ -410,15 +388,6 @@ wheels = [
 ]
 
 [[package]]
-name = "tkinterdnd2"
-version = "0.7.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e1/16/a1b4d644cd0dd4b7949228e13e587dc8720362544a5b594a56ef90cedb89/tkinterdnd2-0.7.0.tar.gz", hash = "sha256:bc5039c28092a702ee70fe15bd9b948cb579571e3b46ba4a092c9929966ca9f3", size = 738026, upload-time = "2026-10-25T12:31:43.332Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/eb/13/73054a55222b55604846d78c2e5e0c84bbe9f35bc7d6d9697a289c905b3a/tkinterdnd2-0.7.0-py3-none-any.whl", hash = "sha256:f93d4f5ad439648ba1673f15db3e271cdd08f075c87f43553ffcdde4e634a717", size = 819285, upload-time = "2026-10-25T12:31:41.55Z" },
-]
-
-[[package]]
 name = "typing-extensions"
 version = "4.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -463,13 +432,11 @@ standard = [
 
 [[package]]
 name = "videoconverter"
-version = "1.0.0"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
-    { name = "customtkinter" },
     { name = "fastapi" },
     { name = "pydantic" },
-    { name = "tkinterdnd2" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -483,10 +450,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "customtkinter", specifier = ">=5.2" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "pydantic", specifier = ">=2.9" },
-    { name = "tkinterdnd2", specifier = ">=0.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
 

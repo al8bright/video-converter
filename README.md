@@ -3,7 +3,7 @@
 NVIDIA 그래픽카드의 하드웨어 가속(**CUDA 디코딩** + **h264_nvenc 인코딩**)으로 큰 영상을 빠르게 H.264 mp4로 줄이는 Windows 데스크톱 앱입니다.
 여러 파일을 동시에 변환하고, 파일마다 진행률과 배속을 보여 줍니다. GPU 가속이 안 되면 자동으로 CPU 변환으로 넘어갑니다.
 
-> 2.0 전환 중입니다([PLAN.md](PLAN.md)). 화면은 React + Tauri로 바뀌었고, 옛 CustomTkinter 화면은 Phase 6에서 지웁니다.
+> 2.0에서 화면을 CustomTkinter에서 React + Tauri로 바꾸고 FFmpeg를 설치 파일에 넣었습니다([PLAN.md](PLAN.md)).
 
 ---
 
@@ -124,7 +124,6 @@ FFmpeg를 올리려면 `build_app.ps1`의 `$FFmpegVersion`과 `$FFmpegSha256`을
 | `backend/src/videoconverter/api/` | 화면이 쓰는 로컬 HTTP/WebSocket API (`base.py`는 네 앱 공통) |
 | `backend/src/videoconverter/cli.py` | `serve`, `doctor` 명령 |
 | `backend/src/videoconverter/core/` | FFmpeg 찾기, FFprobe, FFmpeg 명령, 실행 추적, 변환 파이프라인, 남은 임시 파일 정리 |
-| `backend/src/videoconverter/gui/`, `theme.py`, `jobs/` | 옛 CustomTkinter 화면 (Phase 6에서 삭제) |
 | `backend/src/videoconverter/assets/` | 아이콘 원본 |
 | `backend/packaging/` | PyInstaller 설정 |
 | `backend/tests/` | pytest |

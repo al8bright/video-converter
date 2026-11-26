@@ -161,8 +161,12 @@ FFmpeg가 아예 없는 다른 PC에 설치해 보는 것은 아직 하지 않�
 
 ### Phase 6 — 옛 화면 제거, 2.0.0
 
-- [ ] `gui/`, `theme.py`, `resources.py` 삭제 (`run.py`·`VideoConverter.spec`·`build_exe.bat`·`run_app.bat`은 Phase 1에서 지움)
-- [ ] 버전 2.0.0
+- [x] `gui/`, `theme.py`, `resources.py` 삭제 (`run.py`·`VideoConverter.spec`·`build_exe.bat`·`run_app.bat`은 Phase 1에서 지움)
+- [x] 버전 2.0.0
+
+함께 지운 것: 옛 화면만 쓰던 `jobs/executor.py`와 `tests/test_gui_helpers.py`(확장자 규칙·VRAM 구간 테스트는 `tests/test_hardware.py`로 옮김,
+결과 요약은 `Service`의 `describe_result` 테스트가 맡음), `config.py`의 옛 표시 문구와 `build_settings`, 의존성 `customtkinter`·`tkinterdnd2`,
+Phase 1 전 구조를 가리키던 저장소 맨 위 `pyproject.toml`.
 
 ---
 

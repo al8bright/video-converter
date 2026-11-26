@@ -1,4 +1,4 @@
-"""``python -m videoconverter`` 진입점(명령줄). 옛 화면은 ``python -m videoconverter.gui``."""
+"""``python -m videoconverter`` 진입점(명령줄)."""
 
 from videoconverter import main
 

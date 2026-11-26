@@ -1,6 +1,6 @@
 [project]
 name = "videoconverter"
-version = "1.0.0"
+version = "2.0.0"
 description = "Video Converter backend: NVIDIA NVENC batch conversion queue (FFmpeg)"
 authors = [
     { name = "al8bright" }
@@ -12,8 +12,6 @@ dependencies = [
     "pydantic>=2.9",
     "uvicorn[standard]>=0.32",
     # 옛 화면(CustomTkinter). 새 화면(React)이 들어오면 지운다(PLAN.md Phase 6)
-    "customtkinter>=5.2",
-    "tkinterdnd2>=0.4",
 ]
 
 [project.scripts]

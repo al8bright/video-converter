@@ -15,19 +15,8 @@ from pydantic import BaseModel, Field, ValidationError
 
 SUPPORTED_EXTENSIONS = (".mkv", ".avi", ".mov", ".wmv", ".mp4", ".m4v", ".ts")
 
-VIDEO_BITRATE_OPTIONS = ("5.0", "4.0", "3.5", "2.5", "1.5")
-AUDIO_BITRATE_OPTIONS = ("192k", "128k", "96k")
-
 # 해상도 제한: 설정에는 코드 값을 저장한다. 이 크기보다 큰 원본만 비율을 지켜 줄인다
 RESOLUTIONS = {"1080p": (1920, 1080), "720p": (1280, 720), "none": (9999, 9999)}
-
-# 옛 화면(gui/)이 쓰는 표시 문구. 옛 화면과 함께 지운다(PLAN.md Phase 6)
-RESOLUTION_OPTIONS = ("1080p (FHD)", "720p (HD)", "제한 없음")
-RESOLUTION_LIMITS = {
-    "1080p (FHD)": (1920, 1080),
-    "720p (HD)": (1280, 720),
-    "제한 없음": (9999, 9999),
-}
 
 VRAM_JOB_TIERS = (
     (4100, 1),
@@ -39,7 +28,6 @@ MAX_SLOTS = 8
 
 DEFAULT_VIDEO_MAXRATE_MBPS = 3.5
 DEFAULT_AUDIO_BITRATE = "128k"
-DEFAULT_RESOLUTION = "1080p (FHD)"
 DEFAULT_NVENC_PRESET = "p5"
 REMUX_THRESHOLD_MBPS = 4.0
 FASTSTART_DEFAULT = True
@@ -61,24 +49,6 @@ TEXT_SUB_CODECS = frozenset(
     {"subrip", "srt", "ass", "ssa", "mov_text", "webvtt", "text"}
 )
 FASTSTART_EXTENSIONS = (".mp4", ".mov", ".m4v")
-
-
-def build_settings(video_maxrate_mbps, audio_bitrate, resolution, delete_source):
-    """옛 화면의 표시 문구로 encode_settings와 같은 딕셔너리를 만든다."""
-    max_width, max_height = RESOLUTION_LIMITS.get(
-        resolution, RESOLUTION_LIMITS["제한 없음"]
-    )
-    return {
-        "video_maxrate_mbps": float(video_maxrate_mbps),
-        "audio_bitrate": audio_bitrate,
-        "max_width": max_width,
-        "max_height": max_height,
-        "remux_threshold_mbps": REMUX_THRESHOLD_MBPS,
-        "faststart": FASTSTART_DEFAULT,
-        "delete_source": delete_source,
-        "nvenc_preset": DEFAULT_NVENC_PRESET,
-    }
-
 
 
 # ---------------------------------------------------------------------- 사용자 설정
