@@ -165,7 +165,7 @@ def process_video(
         if copy:
             if settings.get("delete_source", False) and not is_same_file:
                 _safe_remove(file_path)
-                return "SUCCESS_DEL", "Remux 완료 및 원본 삭제됨"
+                return "COPY_DEL", "Remux 완료 및 원본 삭제됨"
             return "COPY", "Remux 완료 (비트레이트 기준 미달, 재인코딩 없이 복사)"
         if settings.get("delete_source", False) and not is_same_file:
             try:

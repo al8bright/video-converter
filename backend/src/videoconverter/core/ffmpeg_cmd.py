@@ -12,6 +12,7 @@ from ..config import (
     FFMPEG_STDERR_SKIP_PREFIXES,
     VIDEO_BUFSIZE_MULTIPLIER,
 )
+from . import tools
 
 
 def _stderr_suggests_nvenc_fail(stderr_text):
@@ -139,7 +140,7 @@ def _build_ffmpeg_cmd(
     add_faststart = bool(faststart) and _output_wants_faststart(output_path)
 
     if remux_only:
-        cmd = ["ffmpeg", "-y", "-i", input_path, "-c", "copy"]
+        cmd = [tools.ffmpeg(), "-y", "-i", input_path, "-c", "copy"]
         if add_faststart:
             cmd += ["-movflags", "+faststart"]
         cmd += [output_path]
@@ -153,7 +154,7 @@ def _build_ffmpeg_cmd(
     audio_bitrate = settings.get("audio_bitrate", DEFAULT_AUDIO_BITRATE)
     nvenc_preset = settings.get("nvenc_preset", DEFAULT_NVENC_PRESET)
 
-    cmd = ["ffmpeg", "-y"]
+    cmd = [tools.ffmpeg(), "-y"]
     if mode == "cuda":
         cmd += ["-hwaccel", "cuda"]
     cmd += ["-i", input_path]

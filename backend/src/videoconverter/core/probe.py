@@ -3,6 +3,8 @@
 import subprocess
 import sys
 
+from . import tools
+
 SUBPROC_TEXT = {"encoding": "utf-8", "errors": "replace"}
 
 
@@ -24,7 +26,7 @@ def get_video_info(file_path):
     }
     try:
         cmd_res = [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            tools.ffprobe(), "-v", "error", "-select_streams", "v:0",
             "-show_entries", "stream=width,height", "-of", "csv=p=0", file_path,
         ]
         result = subprocess.run(
@@ -42,7 +44,7 @@ def get_video_info(file_path):
             info["height"] = int(height)
 
         cmd_dur = [
-            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            tools.ffprobe(), "-v", "error", "-show_entries", "format=duration",
             "-of", "csv=p=0", file_path,
         ]
         result = subprocess.run(
@@ -58,7 +60,7 @@ def get_video_info(file_path):
             info["duration_sec"] = float(line)
 
         cmd_br = [
-            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            tools.ffprobe(), "-v", "error", "-select_streams", "v:0",
             "-show_entries", "stream=bit_rate", "-of", "csv=p=0", file_path,
         ]
         result = subprocess.run(
@@ -74,7 +76,7 @@ def get_video_info(file_path):
             info["bit_rate"] = int(line)
         else:
             cmd_br_fmt = [
-                "ffprobe", "-v", "error", "-show_entries", "format=bit_rate",
+                tools.ffprobe(), "-v", "error", "-show_entries", "format=bit_rate",
                 "-of", "csv=p=0", file_path,
             ]
             result = subprocess.run(
@@ -91,7 +93,7 @@ def get_video_info(file_path):
 
         try:
             cmd_sub = [
-                "ffprobe", "-v", "error", "-select_streams", "s",
+                tools.ffprobe(), "-v", "error", "-select_streams", "s",
                 "-show_entries", "stream=codec_name", "-of", "csv=p=0", file_path,
             ]
             res_sub = subprocess.run(

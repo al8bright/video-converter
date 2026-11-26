@@ -88,7 +88,7 @@ class TestBuildFfmpegCmd:
             "in.mp4", "out.mp4", remux_only=True, vf="", faststart=False,
             mode="cpu", settings=BASE_SETTINGS,
         )
-        assert cmd[0] == "ffmpeg"
+        assert os.path.splitext(os.path.basename(cmd[0]))[0].lower() == "ffmpeg"  # PATH 에 있으면 전체 경로
         assert "-c" in cmd and "copy" in cmd
         # remux 모드에서는 재인코딩 코덱 인자가 없어야 한다.
         assert "h264_nvenc" not in cmd

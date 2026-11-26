@@ -57,6 +57,17 @@ def get_nvidia_gpu_info():
     return None, 0
 
 
+def detect():
+    """GPU·메모리와 권장 동시 작업 수. nvidia-smi를 부르므로 한 번만 불러 기억해 둔다(Service)."""
+    gpu_name, vram_mb = get_nvidia_gpu_info()
+    return {
+        "gpu": gpu_name,
+        "vram_mb": vram_mb,
+        "ram_gb": get_system_ram_gb(),
+        "recommended_jobs": recommend_parallel_jobs(gpu_name, vram_mb),
+    }
+
+
 def recommend_parallel_jobs(gpu_name, vram_mb):
     """GPU 존재 여부와 VRAM 경계값으로 기존 권장 병렬 작업 수를 계산한다."""
     if not gpu_name:

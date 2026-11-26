@@ -38,11 +38,19 @@ NVIDIA GPU의 하드웨어 가속(**CUDA 디코딩** + **h264_nvenc 인코딩**)
 
 ## 🚀 설치 및 실행
 
-> 2.0 전환 중입니다([PLAN.md](PLAN.md)). 지금은 옛 화면(CustomTkinter)이 뜹니다.
+> 2.0 전환 중입니다([PLAN.md](PLAN.md)). 새 화면이 들어오기 전까지는 옛 화면(CustomTkinter)을 씁니다.
 
 ```bat
 cd backend
-uv run videoconverter
+uv run python -m videoconverter.gui
+```
+
+새 화면이 쓸 백엔드(로컬 API)와 점검 명령:
+
+```bat
+cd backend
+uv run videoconverter serve      :: http://127.0.0.1:8767
+uv run videoconverter doctor     :: FFmpeg·ffprobe·NVENC·GPU 확인
 ```
 
 처음 실행할 때 uv가 Python과 의존성을 설치합니다. 테스트와 린트:
@@ -99,12 +107,15 @@ ffprobe -version
 
 | 경로 | 역할 |
 | --- | --- |
-| `backend/src/videoconverter/config.py`, `theme.py` | 변환 설정과 UI 팔레트 상수 |
-| `backend/src/videoconverter/core/` | FFprobe, FFmpeg 명령, 실행 추적, 변환 파이프라인 |
-| `backend/src/videoconverter/gui/` | CustomTkinter 앱, 위젯, DnD, 도움말 (2.0에서 React로 바뀜) |
+| `backend/src/videoconverter/config.py` | 변환 상수, 사용자 설정(`%APPDATA%\VideoConverter\settings.json`) |
+| `backend/src/videoconverter/core/service.py` | 대기열·영상 분석·일괄 변환·중단 상태 |
+| `backend/src/videoconverter/api/` | 화면이 쓰는 로컬 HTTP/WebSocket API (`base.py`는 네 앱 공통) |
+| `backend/src/videoconverter/cli.py` | `serve`, `doctor` 명령 |
+| `backend/src/videoconverter/core/` | FFmpeg 찾기, FFprobe, FFmpeg 명령, 실행 추적, 변환 파이프라인 |
+| `backend/src/videoconverter/gui/`, `theme.py` | 옛 CustomTkinter 화면 (2.0에서 React로 바뀜) |
 | `backend/src/videoconverter/jobs/` | 병렬 작업 실행과 슬롯 상태 관리 |
 | `backend/src/videoconverter/assets/` | 창·실행 파일 아이콘 |
-| `backend/src/videoconverter/__main__.py` | `uv run videoconverter`, `python -m videoconverter` 진입점 |
+| `scripts/check_structure.py` | 네 앱 공통 파일이 같은지 확인 |
 | `backend/tests/` | pytest |
 | `backend/pyproject.toml`, `uv.lock` | 의존성과 ruff·pytest 설정 |
 

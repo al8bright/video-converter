@@ -22,6 +22,7 @@ class QueueItemState(str, Enum):  # noqa: UP042 - 옛 화면이 str() 결과에 
 PROCESS_STATUS_TO_STATE = {
     "SUCCESS": QueueItemState.SUCCESS,
     "SUCCESS_DEL": QueueItemState.SUCCESS_DEL,
+    "COPY_DEL": QueueItemState.SUCCESS_DEL,  # 옛 화면은 복사·변환을 나누지 않고 "완료(삭제)"로 보인다
     "COPY": QueueItemState.COPY,
     "FAIL": QueueItemState.FAILED,
     "CANCELLED": QueueItemState.CANCELLED,

@@ -1,17 +1,13 @@
 """변환 실패 영구 로그(conversion_errors.log) 기록.
 
-로그 경로 결정 근거:
-- 이 패키지는 PyInstaller 로 동결(freeze)되어 배포될 수 있고, 그 경우 실행 파일이
-  위치한 디렉터리(sys._MEIPASS / Program Files 등)는 읽기 전용이거나 사용자 쓰기가
-  막혀 있을 수 있다. 또한 CWD 는 실행 위치에 따라 달라져 신뢰할 수 없다.
-- 따라서 기본 로그 위치를 사용자 홈의 `~/.videoconverter/conversion_errors.log` 로 둔다
-  (어느 환경에서도 사용자 쓰기가 보장되는 위치). 테스트나 특수 배포에서는 환경변수
-  `VIDEOCONVERTER_LOG_DIR` 로 재정의할 수 있다.
-- 기록은 항상 best-effort 이며, 로깅 실패가 변환 결과에 영향을 주지 않는다.
+로그는 설정과 같은 데이터 폴더(%APPDATA%\\VideoConverter)에 둔다. 설치 폴더는 쓰기가 막혀 있을 수
+있고, 현재 폴더는 실행 방법에 따라 달라진다. 테스트에서는 VIDEOCONVERTER_LOG_DIR 로 바꾼다.
+기록은 항상 best-effort 이며, 로깅 실패가 변환 결과에 영향을 주지 않는다.
 """
 
 import os
 
+from ..config import app_home
 from .ffmpeg_cmd import _summarize_ffmpeg_stderr
 
 _LOG_FILENAME = "conversion_errors.log"
@@ -24,7 +20,7 @@ def _resolve_log_dir(log_dir=None):
     env_dir = os.environ.get(_LOG_DIR_ENV)
     if env_dir:
         return env_dir
-    return os.path.join(os.path.expanduser("~"), ".videoconverter")
+    return str(app_home())
 
 
 def log_conversion_error(

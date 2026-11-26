@@ -1,20 +1,23 @@
 [project]
 name = "videoconverter"
 version = "1.0.0"
-description = "Windows NVIDIA NVENC batch video converter backend (FFmpeg)"
+description = "Video Converter backend: NVIDIA NVENC batch conversion queue (FFmpeg)"
 authors = [
     { name = "al8bright" }
 ]
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.115",
+    "pydantic>=2.9",
+    "uvicorn[standard]>=0.32",
     # 옛 화면(CustomTkinter). 새 화면(React)이 들어오면 지운다(PLAN.md Phase 6)
     "customtkinter>=5.2",
     "tkinterdnd2>=0.4",
 ]
 
 [project.scripts]
-videoconverter = "videoconverter.__main__:main"
+videoconverter = "videoconverter:main"
 
 [build-system]
 requires = ["uv_build>=0.12.22,<0.13.0"]
@@ -22,6 +25,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28",
     "pytest>=8.3",
     "ruff>=0.8",
 ]

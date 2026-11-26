@@ -95,15 +95,22 @@ Tauri 창 (React) ──HTTP / WebSocket (127.0.0.1, 실행마다 바뀌는 토�
 - [x] `pyproject.toml`을 uv 기준으로(의존성 고정, ruff 설정), `requirements.txt`·`run_app.bat` 정리. 경로가 바뀌어 동작하지 않게 된 옛 실행 파일 빌드(`run.py`, `VideoConverter.spec`, `build_exe.bat`)도 이때 지움
 - [x] ruff 통과, 변환 로직 테스트 통과 (144개)
 
-완료 기준: `cd backend; uv run pytest`가 통과하고, 옛 화면이 `uv run videoconverter`로 그대로 뜹니다.
+완료 기준: `cd backend; uv run pytest`가 통과하고, 옛 화면이 `uv run videoconverter`로 그대로 뜹니다. (Phase 2부터 옛 화면은 `uv run python -m videoconverter.gui`)
 
 ### Phase 2 — Service와 API
 
-- [ ] `core/service.py`: 대기열 상태 기계(분석 중 → 대기 → 변환 중 → 완료/복사 완료/실패/중단), 동시 작업, 중단
-- [ ] `config.py`: 화면 문구를 코드 값으로 바꾸고 설정 저장
-- [ ] FFmpeg 찾기(옆 → PATH), `doctor [--bundled]`
-- [ ] `api/server.py`, `cli.py`, 공통 `proc.py`
-- [ ] 테스트: FFmpeg를 가짜로 바꾼 Service·API 테스트
+- [x] `core/service.py`: 대기열 상태 기계(분석 중 → 대기 → 변환 중 → 완료/복사 완료/실패/중단), 동시 작업, 중단
+- [x] `config.py`: 화면 문구를 코드 값으로 바꾸고 설정 저장
+- [x] FFmpeg 찾기(옆 → PATH), `doctor [--bundled]` (`core/tools.py`)
+- [x] `api/server.py`, `cli.py`, 공통 `proc.py`·`api/base.py`
+- [x] 테스트: FFmpeg를 가짜로 바꾼 Service·API 테스트, 실제 하위 프로세스로 돌리는 runner 테스트(9b32d1e 회귀 포함)
+
+확인(2026-11-26, RTX 4080, FFmpeg 8.1): API만으로 1440p 고비트레이트 → 1080p NVENC 변환, 저비트레이트 → mp4 복사,
+변환 중 중단(Chocolatey shim 아래 진짜 ffmpeg까지 종료, 임시 파일 없음, 시작 전 항목은 대기로 남음),
+CUDA를 숨긴 실행에서 NVENC 실패 → CPU(libx264) 폴백.
+
+발견(옛 동작 그대로, 따로 정할 일): 저비트레이트라 mp4로 복사할 때 ASS 같은 텍스트 자막이 조용히 빠진다.
+재인코딩 경로는 `mov_text`로 옮겨 담는다.
 
 완료 기준: 브라우저 없이 API만으로 실제 영상을 넣어 변환·중단·폴백이 됩니다.
 
