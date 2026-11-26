@@ -41,8 +41,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         where = "next to the executable" if args.bundled else "on PATH (winget install Gyan.FFmpeg)"
         row(name, bool(version), f"{version} ({path})" if version else f"{path} does not run" if path else f"not found {where}")
 
-    # NVENC 가 없어도 CPU(libx264)로 변환하므로 실패로 치지 않는다
-    ffmpeg = tools.tool_path("ffmpeg")
+    ffmpeg = tools.bundled_tool("ffmpeg") if args.bundled else tools.tool_path("ffmpeg")
     encoders = ""
     if ffmpeg:
         try:
@@ -51,7 +50,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                                       creationflags=CREATE_NO_WINDOW).stdout
         except (OSError, subprocess.SubprocessError):
             encoders = ""
-    row("nvenc", None, "h264_nvenc in this FFmpeg" if "h264_nvenc" in encoders else "h264_nvenc missing (CPU only)")
+    # 설치 파일에 넣는 FFmpeg 에는 둘 다 있어야 한다(GPU 변환과 CPU 폴백). PATH 의 것은 알리기만 한다
+    need = True if args.bundled else None
+    for enc, missing in (("h264_nvenc", "missing (CPU only)"), ("libx264", "missing (no CPU fallback)")):
+        have = enc in encoders
+        row(enc.removeprefix("h264_").removeprefix("lib"), have if need else None,
+            f"{enc} in this FFmpeg" if have else f"{enc} {missing}")
     hw = hardware.detect()
     gpu = f"{hw['gpu']} ({hw['vram_mb']} MB)" if hw["gpu"] else "no NVIDIA GPU found (CPU only)"
     row("gpu", None, f"{gpu}, {hw['recommended_jobs']} jobs recommended")

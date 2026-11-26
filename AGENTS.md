@@ -13,5 +13,6 @@
 - 2.0 전환 중: 계획은 `PLAN.md`, 네 앱(jamak_converter 등) 공통 구조는 jamak_converter의 `docs/STRUCTURE.md`.
 - 코드: `backend/src/videoconverter/` — `core/service.py`(대기열·변환 상태), `api/server.py`(로컬 API), `core/`(ffprobe·ffmpeg 명령·실행·변환 파이프라인), `gui/`·`jobs/`(옛 CustomTkinter 화면, Phase 6에서 삭제).
 - 화면: `app/src/` (React + Vite, 포트 5175). 화면 규칙은 `DESIGN.md`. 확인: `cd app; pnpm lint; pnpm build`. 데스크톱 셸은 `app/src-tauri/`(`pnpm tauri dev`)
+- 설치 파일: `powershell -File scriptsuild_app.ps1` (FFmpeg 8.1 고정, SHA-256 확인). 라이선스 안내는 `THIRD_PARTY_NOTICES.md`
 - 공통 파일(`api/base.py`, `core/proc.py`, `tests/test_common.py` 등)은 네 앱이 같은 내용을 쓴다. 고치면 다른 앱에도 옮기고 `python scripts/check_structure.py`로 확인한다.
 - 테스트·린트: `cd backend; uv run pytest; uv run ruff check`

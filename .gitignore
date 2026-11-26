@@ -16,3 +16,5 @@ skills-lock.json
 # the original one-off CLI script: holds private folder paths
 convert_video_win.py
 .pytest_cache/
+# FFmpeg downloaded by scripts/build_app.ps1
+backend/.tools/

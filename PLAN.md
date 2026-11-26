@@ -144,12 +144,20 @@ ffmpeg 2개(shim과 진짜)와 백엔드가 함께 끝남. 남은 `.part-` 파�
 
 ### Phase 5 — 설치 파일, CI, 문서
 
-- [ ] `backend/packaging`, `scripts/build_app.ps1`: 정해 둔 FFmpeg 빌드(ffmpeg + ffprobe, NVENC·libx264 포함)를 SHA-256으로 확인해 넣음
-- [ ] `THIRD_PARTY_NOTICES.md`, `LICENSE`(MIT)
-- [ ] `.github/workflows/ci.yml`
-- [ ] README, `CLAUDE.md`·`AGENTS.md` 갱신(지금은 없어진 `gui_app.py`를 가리킴)
+- [x] `backend/packaging`, `scripts/build_app.ps1`: 정해 둔 FFmpeg 빌드(ffmpeg + ffprobe, NVENC·libx264 포함)를 SHA-256으로 확인해 넣음
+- [x] `THIRD_PARTY_NOTICES.md`, `LICENSE`(MIT)
+- [x] `.github/workflows/ci.yml`
+- [x] README, `CLAUDE.md`·`AGENTS.md` 갱신(지금은 없어진 `gui_app.py`를 가리킴)
 
 완료 기준: FFmpeg가 없는 PC에 설치해 변환이 됩니다.
+
+정한 것: FFmpeg는 이 PC에서 시험한 gyan.dev 8.1 essentials(GyanD GitHub 릴리스, zip SHA-256 `8748283d…63c6`)로 고정했습니다.
+그 무렵 최신은 9.1이었지만 시험하지 않았습니다. 받은 zip의 `ffmpeg.exe`·`ffprobe.exe`는 Chocolatey로 깔린 8.1과 바이트까지 같았습니다.
+`doctor --bundled`는 NVENC와 libx264가 없으면 실패합니다.
+
+확인(2026-11-26): `build_app.ps1`로 설치 파일(71.9 MB)을 만듦. 묶은 백엔드에 옛 화면(tkinter·customtkinter)은 들어가지 않음.
+PATH에서 FFmpeg를 뺀 채 묶은 백엔드를 띄워 변환 → 함께 넣은 `ffmpeg.exe`로 NVENC 변환(short.mkv)과 복사(multi.mkv)가 됨.
+FFmpeg가 아예 없는 다른 PC에 설치해 보는 것은 아직 하지 않았습니다(이 PC에는 FFmpeg가 깔려 있음).
 
 ### Phase 6 — 옛 화면 제거, 2.0.0
 
