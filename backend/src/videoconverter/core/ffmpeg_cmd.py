@@ -1,6 +1,7 @@
 """ffmpeg 명령 구성, 출력 경로, 변환 판정 순수 헬퍼."""
 
 import os
+import time
 import uuid
 
 from ..config import (
@@ -118,12 +119,27 @@ def _tmp_is_valid(path, min_bytes=1024):
         return False
 
 
-def _safe_remove(path):
-    try:
-        if path and os.path.exists(path):
-            os.remove(path)
-    except OSError:
-        pass
+def _safe_remove(path, wait=2.0):
+    """있으면 지운다. 실패해도 예외를 내지 않는다.
+
+    ffmpeg 를 끊은 직후에는 파일이 아직 잡혀 있을 수 있다. 특히 Chocolatey 등의 대리 실행 파일(shim)은
+    자신이 먼저 끝나고 진짜 ffmpeg 가 조금 늦게 끝난다. 그 사이에 지우면 '사용 중' 으로 실패해 만들다 만
+    파일이 남으므로, 잠겨 있으면 wait 초까지 다시 시도한다.
+    """
+    if not path:
+        return
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                return
+            time.sleep(0.1)
+        except OSError:
+            return
 
 
 def _build_ffmpeg_cmd(

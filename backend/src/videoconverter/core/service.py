@@ -19,9 +19,17 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from videoconverter import hardware
-from videoconverter.config import MAX_SLOTS, SUPPORTED_EXTENSIONS, Settings, SettingsStore, encode_settings
+from videoconverter.config import (
+    MAX_SLOTS,
+    REMUX_THRESHOLD_MBPS,
+    RESOLUTIONS,
+    SUPPORTED_EXTENSIONS,
+    Settings,
+    SettingsStore,
+    encode_settings,
+)
 from videoconverter.core import tools
-from videoconverter.core.ffmpeg_cmd import _force_mp4_ext, resolve_output_path
+from videoconverter.core.ffmpeg_cmd import _force_mp4_ext, resolve_output_path, should_remux
 from videoconverter.core.pipeline import process_video
 from videoconverter.core.probe import get_video_info
 from videoconverter.core.runner import terminate_all_processes
@@ -61,6 +69,7 @@ class Item:
     width: int = 0
     height: int = 0
     duration: float = 0.0  # 초
+    bit_rate: int = 0  # 비디오 비트레이트(bps). 모르면 0
     status: str = "analyzing"
     message: str | None = None  # 결과 설명 또는 실패 사유
     source_deleted: bool = False
@@ -117,6 +126,21 @@ def output_path(source: str, out_dir: str, name_mode: str, suffix: str) -> str:
     """process_video 가 만들 파일의 경로(항상 .mp4)."""
     value = suffix if name_mode == "suffix" else ""
     return _force_mp4_ext(os.path.abspath(resolve_output_path(source, out_dir, name_mode, value)))
+
+
+def plan_for(item: dict, s: Settings) -> str | None:
+    """지금 설정으로 변환하면 무엇을 할지: scale(줄여서 변환) | encode(변환) | copy(mp4로 복사). 정보가 없으면 None.
+
+    process_video 와 같은 규칙이다. 실제로는 복사가 실패하면 변환으로 넘어간다.
+    """
+    if not item["width"]:
+        return None
+    max_w, max_h = RESOLUTIONS[s.resolution]
+    if item["width"] > max_w or item["height"] > max_h:
+        return "scale"
+    if should_remux(item["bit_rate"], item["duration"], item["size"], REMUX_THRESHOLD_MBPS, False):
+        return "copy"
+    return "encode"
 
 
 def describe_result(tally: dict, total: int) -> tuple[str, bool]:
@@ -177,11 +201,15 @@ class Service:
             b = asdict(self.batch)
             running = sum(i.percent for i in self.items if i.status == "converting")
             b["overall"] = (b["finished"] + running) / b["total"] if b["total"] else 0.0
+            s = self.settings.get()
+            items = [asdict(i) for i in self.items]
+            for d in items:
+                d["plan"] = plan_for(d, s)
             return {
                 "version": self.version,
-                "items": [asdict(i) for i in self.items],
+                "items": items,
                 "batch": b,
-                "settings": self.settings.get().model_dump(),
+                "settings": s.model_dump(),
                 "notices": list(self.notices),
             }
 
@@ -263,6 +291,7 @@ class Service:
             if info:
                 item.width, item.height = info.get("width", 0), info.get("height", 0)
                 item.duration = info.get("duration_sec", 0.0)
+                item.bit_rate = info.get("bit_rate", 0)
                 item.status = "waiting"
             else:
                 item.status = "failed"

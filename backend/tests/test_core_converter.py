@@ -774,3 +774,39 @@ class TestPipelinePortedBehavior:
         )
         assert status == "FAIL"
         assert calls["n"] == 1  # 치명 입력오류는 재인코딩 폴백 없이 즉시 중단
+
+
+# ---------------------------------------------------------------------------
+# _safe_remove : 끊은 직후 아직 잡혀 있는 파일
+# ---------------------------------------------------------------------------
+class TestSafeRemove:
+    def test_잠겨_있으면_풀릴_때까지_다시_시도한다(self, monkeypatch, tmp_path):
+        from videoconverter.core import ffmpeg_cmd
+
+        p = tmp_path / "x.mp4.part-1-abc.mp4"
+        p.write_bytes(b"x")
+        real = os.remove
+        calls = []
+
+        def locked_twice(path):
+            calls.append(path)
+            if len(calls) < 3:
+                raise PermissionError(32, "being used by another process")
+            real(path)
+
+        monkeypatch.setattr(ffmpeg_cmd.os, "remove", locked_twice)
+        ffmpeg_cmd._safe_remove(str(p))
+        assert not p.exists() and len(calls) == 3
+
+    def test_끝내_잠겨_있어도_예외를_내지_않는다(self, monkeypatch, tmp_path):
+        from videoconverter.core import ffmpeg_cmd
+
+        p = tmp_path / "x.mp4"
+        p.write_bytes(b"x")
+
+        def locked(path):
+            raise PermissionError(32, "being used by another process")
+
+        monkeypatch.setattr(ffmpeg_cmd.os, "remove", locked)
+        ffmpeg_cmd._safe_remove(str(p), wait=0.2)
+        assert p.exists()

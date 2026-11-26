@@ -45,13 +45,21 @@ cd backend
 uv run python -m videoconverter.gui
 ```
 
-새 화면이 쓸 백엔드(로컬 API)와 점검 명령:
+새 화면(React)은 데스크톱 셸(Tauri)이 들어오기 전까지 브라우저에서 띄웁니다. 터미널 두 개에서:
 
 ```bat
 cd backend
 uv run videoconverter serve      :: http://127.0.0.1:8767
 uv run videoconverter doctor     :: FFmpeg·ffprobe·NVENC·GPU 확인
 ```
+
+```bat
+cd app
+pnpm install
+pnpm dev                         :: http://localhost:5175
+```
+
+브라우저에서는 끌어다 놓기와 선택 창이 없어 '경로로 추가'로 파일이나 폴더 경로를 넣습니다. 화면 규칙은 [DESIGN.md](DESIGN.md)에 있습니다.
 
 처음 실행할 때 uv가 Python과 의존성을 설치합니다. 테스트와 린트:
 
@@ -115,6 +123,7 @@ ffprobe -version
 | `backend/src/videoconverter/gui/`, `theme.py` | 옛 CustomTkinter 화면 (2.0에서 React로 바뀜) |
 | `backend/src/videoconverter/jobs/` | 병렬 작업 실행과 슬롯 상태 관리 |
 | `backend/src/videoconverter/assets/` | 창·실행 파일 아이콘 |
+| `app/src/` | 새 화면(React): 대기열 · 설정 · 도움말. `backend.ts`·`common.tsx`·`base.css`는 네 앱 공통 |
 | `scripts/check_structure.py` | 네 앱 공통 파일이 같은지 확인 |
 | `backend/tests/` | pytest |
 | `backend/pyproject.toml`, `uv.lock` | 의존성과 ruff·pytest 설정 |

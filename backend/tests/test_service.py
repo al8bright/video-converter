@@ -239,6 +239,19 @@ class TestQueue:
         with pytest.raises(ServiceError, match="찾을 수 없습니다"):
             svc.open_target(item.id, folder=False)
 
+    def test_예정_동작은_지금_설정을_따른다(self, svc, probes, tmp_path):
+        probes["low.mkv"] = {"width": 1280, "height": 720, "duration_sec": 60.0, "bit_rate": 1_000_000}
+        probes["mid.mkv"] = {"width": 1920, "height": 1080, "duration_sec": 60.0, "bit_rate": 8_000_000}
+        probes["big.mkv"] = {"width": 2560, "height": 1440, "duration_sec": 60.0, "bit_rate": 1_000_000}
+        probes["bad.mkv"] = None
+        svc.add_paths([video(tmp_path, n) for n in ("low.mkv", "mid.mkv", "big.mkv", "bad.mkv")])
+        plans = lambda: {i["name"]: i["plan"] for i in svc.snapshot()["items"]}  # noqa: E731
+        assert plans() == {"low.mkv": "copy", "mid.mkv": "encode", "big.mkv": "scale", "bad.mkv": None}
+        svc.update_settings({"resolution": "720p"})
+        assert plans()["mid.mkv"] == "scale"
+        svc.update_settings({"resolution": "none"})
+        assert plans()["big.mkv"] == "copy", "줄일 필요가 없으면 비트레이트로 정한다"
+
     def test_변환_중_전체_진행률(self, svc, tmp_path):
         svc.add_paths([video(tmp_path, n) for n in ("a.mkv", "b.mkv")])
         svc.batch.total, svc.batch.finished = 2, 1
